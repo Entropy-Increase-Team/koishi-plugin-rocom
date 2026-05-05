@@ -144,9 +144,6 @@ export class RocomClient {
         params,
         timeout: this.timeout,
       })
-      if (path === '/api/v1/games/rocom/merchant/info') {
-        console.log(`[rocom-client] GET ${path} response\n${this.stringifyForLog(resp)}`)
-      }
       if (resp?.code !== 0) {
         logger.warn(path + ' error: ' + (resp?.message || 'unknown'))
         if (!options?.silentFailureDetails) {
