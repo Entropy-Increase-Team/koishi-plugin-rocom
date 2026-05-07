@@ -1,11 +1,11 @@
 {
   "name": "koishi-plugin-rocom",
   "description": "洛克王国查询与订阅插件",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "lib/index.js",
-  "typings": "lib/index.d.ts",                  
-  "homepage": "https://github.com/staytomorrow/koishi-plugin-rocom",        
-  "repository": {                          
+  "typings": "lib/index.d.ts",
+  "homepage": "https://github.com/staytomorrow/koishi-plugin-rocom",
+  "repository": {
     "type": "git",
     "url": "git+https://github.com/staytomorrow/koishi-plugin-rocom.git"
   },
@@ -53,6 +53,6 @@
         "database"
       ]
     },
-    "preview":true
+    "preview": true
   }
 }
