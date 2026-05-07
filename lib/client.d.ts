@@ -14,6 +14,7 @@ export declare class RocomClient {
     private sanitizeForLog;
     private headersForLog;
     private stringifyForLog;
+    private isApiKeyPermissionUndeclaredError;
     private logRequestFailureDetails;
     private get;
     private post;

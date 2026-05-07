@@ -371,10 +371,19 @@ function homePlantIcon(deps: PluginDeps, iconId: any): string {
 }
 
 let homePlantMapCache: Record<string, any> | null = null
+const HOME_PLANT_MAP_RELATIVE_PATH = path.join('render-templates', 'home', 'data', 'home_item_list.json')
+
+function resolveHomePlantMapPath() {
+  const candidates = [
+    path.resolve(__dirname, '..', HOME_PLANT_MAP_RELATIVE_PATH),
+    path.resolve(__dirname, HOME_PLANT_MAP_RELATIVE_PATH),
+  ]
+  return candidates.find(candidate => fs.existsSync(candidate)) || candidates[0]
+}
 
 function loadHomePlantMap(): Record<string, any> {
   if (homePlantMapCache) return homePlantMapCache
-  const filePath = path.resolve(__dirname, '..', 'render-templates', 'home', 'data', 'home_item_list.json')
+  const filePath = resolveHomePlantMapPath()
   try {
     const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
     homePlantMapCache = data && typeof data === 'object' ? data : {}

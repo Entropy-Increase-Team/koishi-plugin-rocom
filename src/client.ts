@@ -19,9 +19,15 @@ export class RocomClient {
     return uid.trim().replace(/[^a-zA-Z0-9_\- \u4e00-\u9fa5]/g, '').trim()
   }
 
-  private wegameHeaders(fwToken = '', userIdentifier = '', clientType = '', clientId = ''): Record<string, string> {
+  private wegameHeaders(
+    fwToken = '',
+    userIdentifier = '',
+    clientType = '',
+    clientId = '',
+    includeApiKey = true,
+  ): Record<string, string> {
     const headers: Record<string, string> = {}
-    if (this.apiKey) headers['X-API-Key'] = this.apiKey
+    if (includeApiKey && this.apiKey) headers['X-API-Key'] = this.apiKey
     if (fwToken) headers['X-Framework-Token'] = fwToken
     if (userIdentifier) headers['X-User-Identifier'] = this.sanitizeUid(userIdentifier)
     if (clientType) headers['X-Client-Type'] = clientType
@@ -93,6 +99,11 @@ export class RocomClient {
     } catch {
       return String(value)
     }
+  }
+
+  private isApiKeyPermissionUndeclaredError(message: string): boolean {
+    if (!message) return false
+    return /未声明\s*api\s*key\s*权限|api\s*key\s*permission|api key 权限/i.test(message)
   }
 
   private logRequestFailureDetails(
@@ -260,12 +271,12 @@ export class RocomClient {
     }
   }
 
-  private async getIngameTask(ctx: Context, taskId: string) {
+  private async getIngameTask(ctx: Context, taskId: string, includeApiKey = true) {
     return this.requestWithStatus(
       ctx,
       'GET',
       `/api/v1/games/rocom/ingame/tasks/${taskId}`,
-      this.wegameHeaders(),
+      this.wegameHeaders('', '', '', '', includeApiKey),
       { acceptedStatuses: [200, 202] },
     )
   }
@@ -376,7 +387,8 @@ export class RocomClient {
     }
 
     const path = '/api/v1/games/rocom/ingame/player/search'
-    const headers = this.wegameHeaders()
+    let includeApiKey = true
+    let headers = this.wegameHeaders()
     const payload = { uid: sanitizedUid, wait_ms: 5000 }
 
     let { status, data } = await this.requestWithStatus(ctx, 'POST', path, headers, {
@@ -394,6 +406,30 @@ export class RocomClient {
       data = fallback.data
       if (status === 200 && data && this.isIngamePlayerPayload(data)) return data
     }
+
+    if (status === null && includeApiKey && this.apiKey && this.isApiKeyPermissionUndeclaredError(this.getLastError(''))) {
+      logger.warn('ingame/player/search rejected X-API-Key, retrying without API key')
+      includeApiKey = false
+      headers = this.wegameHeaders('', '', '', '', false)
+
+      const retry = await this.requestWithStatus(ctx, 'POST', path, headers, {
+        json: payload,
+        acceptedStatuses: [200, 202],
+      })
+      status = retry.status
+      data = retry.data
+      if (status === 200 && data && this.isIngamePlayerPayload(data)) return data
+
+      if (status === null) {
+        const fallback = await this.requestWithStatus(ctx, 'GET', path, headers, {
+          params: payload,
+          acceptedStatuses: [200, 202],
+        })
+        status = fallback.status
+        data = fallback.data
+        if (status === 200 && data && this.isIngamePlayerPayload(data)) return data
+      }
+    }
     if (!data) return null
     if (this.isIngamePlayerPayload(data)) return data
 
@@ -405,7 +441,7 @@ export class RocomClient {
 
     for (let i = 0; i < 8; i++) {
       await new Promise(resolve => setTimeout(resolve, 1000))
-      const task = await this.getIngameTask(ctx, taskId)
+      const task = await this.getIngameTask(ctx, taskId, includeApiKey)
       if (task.status === 200) return task.data
       if (task.status === null) return null
     }
@@ -446,7 +482,8 @@ export class RocomClient {
     }
 
     const path = '/api/v1/games/rocom/ingame/home/info'
-    const headers = this.wegameHeaders()
+    let includeApiKey = true
+    let headers = this.wegameHeaders()
     const payload = { uid: sanitizedUid, wait_ms: waitMs }
     let { status, data } = await this.requestWithStatus(ctx, 'POST', path, headers, {
       json: payload,
@@ -464,6 +501,30 @@ export class RocomClient {
       if (status === 200 && data && !(data.task_id || data.taskId || data.taskID)) return data
     }
 
+    if (status === null && includeApiKey && this.apiKey && this.isApiKeyPermissionUndeclaredError(this.getLastError(''))) {
+      logger.warn('ingame/home/info rejected X-API-Key, retrying without API key')
+      includeApiKey = false
+      headers = this.wegameHeaders('', '', '', '', false)
+
+      const retry = await this.requestWithStatus(ctx, 'POST', path, headers, {
+        json: payload,
+        acceptedStatuses: [200, 202],
+      })
+      status = retry.status
+      data = retry.data
+      if (status === 200 && data && !(data.task_id || data.taskId || data.taskID)) return data
+
+      if (status === null) {
+        const fallback = await this.requestWithStatus(ctx, 'GET', path, headers, {
+          params: payload,
+          acceptedStatuses: [200, 202],
+        })
+        status = fallback.status
+        data = fallback.data
+        if (status === 200 && data && !(data.task_id || data.taskId || data.taskID)) return data
+      }
+    }
+
     const taskId = data?.task_id || data?.taskId || data?.taskID
     if (!taskId) {
       if (status === 202) this.setLastError('家园查询任务已入队，但未返回 task_id')
@@ -472,7 +533,7 @@ export class RocomClient {
 
     for (let i = 0; i < 10; i++) {
       await new Promise(resolve => setTimeout(resolve, 1000))
-      const task = await this.getIngameTask(ctx, taskId)
+      const task = await this.getIngameTask(ctx, taskId, includeApiKey)
       if (task.status === 200) return task.data
       if (task.status === null) return null
     }
@@ -483,15 +544,31 @@ export class RocomClient {
 
   async ingameMerchantInfo(ctx: Context, shopId: string | number) {
     const params = { shop_id: shopId }
+    let headers = this.wegameHeaders()
     const data = await this.get(
       ctx,
       '/api/v1/games/rocom/ingame/merchant/info',
-      this.wegameHeaders(),
+      headers,
       params,
       { silentFailureDetails: true },
     )
     if (data) return data
-    return this.post(ctx, '/api/v1/games/rocom/ingame/merchant/info', this.wegameHeaders(), params)
+    const postData = await this.post(ctx, '/api/v1/games/rocom/ingame/merchant/info', headers, params)
+    if (postData) return postData
+    if (this.apiKey && this.isApiKeyPermissionUndeclaredError(this.getLastError(''))) {
+      logger.warn('ingame/merchant/info rejected X-API-Key, retrying without API key')
+      headers = this.wegameHeaders('', '', '', '', false)
+      const fallbackData = await this.get(
+        ctx,
+        '/api/v1/games/rocom/ingame/merchant/info',
+        headers,
+        params,
+        { silentFailureDetails: true },
+      )
+      if (fallbackData) return fallbackData
+      return this.post(ctx, '/api/v1/games/rocom/ingame/merchant/info', headers, params)
+    }
+    return null
   }
 
   async getFriendship(ctx: Context, fwToken: string, userIds: string, userIdentifier = '') {
