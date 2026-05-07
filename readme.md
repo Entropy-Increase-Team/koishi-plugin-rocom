@@ -1,10 +1,10 @@
 # koishi-plugin-rocom
-> APIKey
-> sk-ba042e079cf9ccb30e72b3d5af458f45
-> sk-c7952558b84a176b76d0215760732330
-> sk-b3d96323b2b045282c52f81ca43fcad8
-> sk-5c14c1e5da063037d02c15e50285dd04
-> 交流反馈：1097809141
+> APIKey  
+> sk-ba042e079cf9ccb30e72b3d5af458f45  
+> sk-c7952558b84a176b76d0215760732330  
+> sk-b3d96323b2b045282c52f81ca43fcad8  
+> sk-5c14c1e5da063037d02c15e50285dd04  
+> 交流反馈：1097809141  
 [![npm](https://img.shields.io/npm/v/koishi-plugin-rocom?style=flat-square)](https://www.npmjs.com/package/koishi-plugin-rocom)
 
 Koishi 版洛克王国数据查询插件。插件基于 WeGame / 后端接口提供账号绑定、个人档案、战绩、背包、阵容、交换大厅、远行商人、查蛋配种、Wiki 查询等功能，并通过 `koishi-plugin-puppeteer` 将部分结果渲染为图片发送。
