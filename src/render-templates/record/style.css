@@ -5,8 +5,7 @@
 
 @font-face {
     font-family: 'mianfeiziti';
-    src: url('../../ttf/dundun.xHd_Ee5-.woff2') format('woff2'),
-         url('../../ttf/dundun.BCbg_KoL.ttf') format('truetype');
+    src: url('../../ttf/dundun.xHd_Ee5-.woff2') format('woff2');
     font-display: swap;
 }
 

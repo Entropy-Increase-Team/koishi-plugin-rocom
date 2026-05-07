@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-rocom",
   "description": "洛克王国查询与订阅插件",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "homepage": "https://github.com/staytomorrow/koishi-plugin-rocom",
@@ -17,7 +17,7 @@
   "license": "MIT",
   "scripts": {
     "build": "tsc -p tsconfig.json --emitDeclarationOnly false --module commonjs --moduleResolution node",
-    "postbuild": "node -e \"const fs=require('fs');fs.rmSync('lib/render-templates',{recursive:true,force:true});fs.cpSync('src/render-templates','lib/render-templates',{recursive:true});\"",
+    "postbuild": "node -e \"const fs=require('fs');for (const dir of ['render-templates','img','ttf']) { fs.rmSync('lib/'+dir,{recursive:true,force:true}); fs.cpSync('src/'+dir,'lib/'+dir,{recursive:true}); }\"",
     "check": "tsc -p tsconfig.json --noEmit --pretty false",
     "pack:dry": "npm pack --dry-run",
     "prepack": "npm run build"
