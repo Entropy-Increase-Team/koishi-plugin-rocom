@@ -768,6 +768,7 @@ export function register(deps: PluginDeps) {
   const { ctx, client } = deps
 
   ctx.command('洛克').subcommand('.档案', '查看个人档案')
+    .alias('洛克档案')
     .action(async ({ session }) => {
       const fwToken = await getPrimaryToken(deps, session!.userId!)
       if (!fwToken) return notLoggedInHint()
@@ -950,6 +951,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.战绩 [page:number]', '查看对战战绩')
+    .alias('洛克战绩')
     .action(async ({ session }, _page = 1) => {
       const fwToken = await getPrimaryToken(deps, session!.userId!)
       if (!fwToken) return notLoggedInHint()
@@ -1001,6 +1003,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.背包 [arg1:string] [arg2:string]', '查看精灵背包')
+    .alias('洛克背包')
     .action(async ({ session }, arg1, arg2) => {
       const fwToken = await getPrimaryToken(deps, session!.userId!)
       if (!fwToken) return notLoggedInHint()
@@ -1060,6 +1063,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.阵容 [arg1:string] [arg2:string]', '查看阵容推荐')
+    .alias('洛克阵容')
     .action(async ({ session }, arg1, arg2) => {
       const fwToken = await getPrimaryToken(deps, session!.userId!)
       if (!fwToken) return notLoggedInHint()
@@ -1153,6 +1157,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.交换大厅 [page:number]', '查看交换大厅')
+    .alias('洛克交换大厅')
     .action(async ({ session }, page = 1) => {
       const fwToken = await getPrimaryToken(deps, session!.userId!)
       if (!fwToken) return notLoggedInHint()
@@ -1199,6 +1204,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.玩家 <uid:string>', '通过 ingame 接口查询玩家基础资料')
+    .alias('洛克玩家')
     .action(async ({ session }, uid) => {
       if (!uid) return '请提供玩家 UID。用法：洛克.玩家 <UID>'
       const res = await client.ingamePlayerSearch(ctx, uid)
@@ -1207,6 +1213,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.家园 [uid:string]', '通过 UID 查询家园菜园、守卫和室内精灵')
+    .alias('洛克家园')
     .action(async ({ session }, uid = '') => {
       let targetUid = String(uid || '').trim()
       if (!targetUid) {
@@ -1220,6 +1227,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.商店 <shopId:string>', '通过 ingame 接口查询商店信息')
+    .alias('洛克商店')
     .action(async ({ session }, shopId) => {
       if (!shopId) return '请提供商店 ID。用法：洛克.商店 <shop_id>'
       const res = await client.ingameMerchantInfo(ctx, shopId)
@@ -1228,6 +1236,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.好友关系 <userIds:string>', '查询好友关系')
+    .alias('洛克好友关系')
     .action(async ({ session }, userIds) => {
       if (!userIds) return '请提供要查询的用户 ID 列表。用法：洛克.好友关系 <id1,id2>'
       const fwToken = await getPrimaryToken(deps, session!.userId!)
@@ -1238,6 +1247,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.学生 [area:number] [accountType:number]', '查询学生认证状态与学生活动福利')
+    .alias('洛克学生')
     .action(async ({ session }, area = 101, accountType = 0) => {
       const fwToken = await getPrimaryToken(deps, session!.userId!)
       if (!fwToken) return notLoggedInHint()
@@ -1267,6 +1277,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.调试家园订阅', '立即执行一次家园订阅检查')
+    .alias('洛克调试家园订阅')
     .action(async ({ session }) => {
       if (!isBotAdmin(session, deps.config.adminUserIds)) return '此指令仅限管理员使用。'
       const result = await checkHomeSubscriptions(deps)

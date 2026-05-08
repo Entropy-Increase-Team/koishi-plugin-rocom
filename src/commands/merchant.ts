@@ -250,6 +250,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.调试远行商人订阅', '立即执行一次远行商人订阅检查')
+    .alias('洛克调试远行商人订阅')
     .action(async ({ session }) => {
       if (!isBotAdmin(session, config.adminUserIds)) return '此指令仅限管理员使用。'
       const result = await checkMerchantSubscriptions(deps)

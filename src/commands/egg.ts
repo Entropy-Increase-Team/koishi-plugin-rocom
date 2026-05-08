@@ -64,6 +64,7 @@ export function register(deps: PluginDeps) {
   const { ctx, client, eggService } = deps
 
   ctx.command('洛克').subcommand('.查蛋 [arg1:string] [arg2:string]', '查询精灵蛋组')
+    .alias('洛克查蛋')
     .action(async ({ session }, arg1, arg2) => {
       if (!arg1) {
         return [
@@ -169,6 +170,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.配种 <nameA:string> [nameB:string]', '配种查询')
+    .alias('洛克配种')
     .action(async ({ session }, nameA, nameB) => {
       if (!nameA) {
         return [

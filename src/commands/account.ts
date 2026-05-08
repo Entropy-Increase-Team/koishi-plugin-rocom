@@ -83,6 +83,7 @@ export function register(deps: PluginDeps) {
   const { ctx, client, userMgr } = deps
 
   ctx.command('洛克').subcommand('.QQ登录', 'QQ 扫码登录')
+    .alias('洛克QQ登录')
     .action(async ({ session }) => {
       const userId = session!.userId!
       const qrData = await client.qqQrLogin(ctx, userId)
@@ -112,6 +113,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.微信登录', '微信扫码登录')
+    .alias('洛克微信登录')
     .action(async ({ session }) => {
       const userId = session!.userId!
       const qrData = await client.wechatQrLogin(ctx, userId)
@@ -136,6 +138,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.导入 <tgpId:string> <tgpTicket:string>', '导入 WeGame 凭证')
+    .alias('洛克导入')
     .action(async ({ session }, tgpId, tgpTicket) => {
       if (!tgpId || !tgpTicket) return '用法：洛克.导入 <tgp_id> <tgp_ticket>'
       const userId = session!.userId!
@@ -145,6 +148,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.绑定列表', '查看已绑定账号')
+    .alias('洛克绑定列表')
     .action(async ({ session }) => {
       const bindings = userMgr.getUserBindings(session!.userId!)
       if (!bindings.length) return '暂无绑定账号。'
@@ -176,6 +180,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.切换 <index:number>', '切换主账号')
+    .alias('洛克切换')
     .action(async ({ session }, index) => {
       if (!index) return '用法：洛克.切换 <序号>'
       return userMgr.switchPrimary(session!.userId!, index)
@@ -184,6 +189,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.解绑 <index:number>', '解绑账号')
+    .alias('洛克解绑')
     .action(async ({ session }, index) => {
       if (!index) return '用法：洛克.解绑 <序号>'
       const removed = userMgr.deleteUserBinding(session!.userId!, index)
@@ -203,6 +209,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('洛克').subcommand('.刷新', '刷新当前主账号凭证')
+    .alias('洛克刷新')
     .action(async ({ session }) => {
       const userId = session!.userId!
       const binding = userMgr.getPrimaryBinding(userId)
