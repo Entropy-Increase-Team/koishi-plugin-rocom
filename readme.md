@@ -40,7 +40,8 @@ Koishi 版洛克王国数据查询插件。插件基于 WeGame / 后端接口提
 
 如果图片渲染失败，插件会尽量回落为文字结果；但档案、战绩、背包、阵容、交换大厅、远行商人和查蛋配种等功能推荐配合 Puppeteer 使用。
 
-> 图片位置：Koishi 插件启用与服务依赖截图。建议插入 `docs/images/setup-services.png`。
+> 图片位置：Koishi 插件启用与服务依赖截图。建议插入 `docs/images/setup-services.png`。  
+  
 | 功能 | 建议图片路径 |
 | --- | --- |
 | 插件总览 | `docs/images/overview.png` |
