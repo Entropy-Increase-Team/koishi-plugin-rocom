@@ -1,4 +1,6 @@
 # koishi-plugin-rocom
+<img width="400" height="400" alt="image" src="https://github.com/user-attachments/assets/cdd7655e-08db-4db2-becc-5a2ace6c744b" />
+
 注意，本项目仍处于开发调试期，可能会有未知BUG的产生。  
 > APIKey  
 > sk-ba042e079cf9ccb30e72b3d5af458f45  
@@ -39,7 +41,39 @@ Koishi 版洛克王国数据查询插件。插件基于 WeGame / 后端接口提
 如果图片渲染失败，插件会尽量回落为文字结果；但档案、战绩、背包、阵容、交换大厅、远行商人和查蛋配种等功能推荐配合 Puppeteer 使用。
 
 > 图片位置：Koishi 插件启用与服务依赖截图。建议插入 `docs/images/setup-services.png`。
-
+| 功能 | 建议图片路径 |
+| --- | --- |
+| 插件总览 | `docs/images/overview.png` |
+| 服务启用 | `docs/images/setup-services.png` |
+| 插件配置 | `docs/images/config.png` |
+| 快速开始 | `docs/images/quick-start.png` |
+| 帮助菜单 | `docs/images/help-menu.png` |
+| QQ 登录 | `docs/images/account-qq-login.png` |
+| 微信登录 | `docs/images/account-wechat-login.png` |
+| 凭证导入 | `docs/images/account-import.png` |
+| 绑定列表 | `docs/images/account-bindings.png` |
+| 切换账号 | `docs/images/account-switch.png` |
+| 解绑账号 | `docs/images/account-unbind.png` |
+| 刷新凭证 | `docs/images/account-refresh.png` |
+| 个人档案 | `docs/images/query-profile.png` |
+| 战绩 | `docs/images/query-record.png` |
+| 背包 | `docs/images/query-package.png` |
+| 阵容推荐 | `docs/images/query-lineup.png` |
+| 阵容详情 | `docs/images/query-lineup-detail.png` |
+| 交换大厅 | `docs/images/query-exchange-hall.png` |
+| 远行商人 | `docs/images/merchant-current.png` |
+| 订阅远行商人 | `docs/images/merchant-subscribe.png` |
+| 取消订阅远行商人 | `docs/images/merchant-unsubscribe.png` |
+| 精灵 Wiki | `docs/images/wiki-pet.png` |
+| 技能 Wiki | `docs/images/wiki-skill.png` |
+| 精灵查蛋 | `docs/images/egg-search.png` |
+| 尺寸反查 | `docs/images/egg-size-search.png` |
+| 查蛋候选 | `docs/images/egg-candidates.png` |
+| 目标配种方案 | `docs/images/egg-want.png` |
+| 配种判定 | `docs/images/egg-pair.png` |
+| 刷新所有凭证 | `docs/images/admin-refresh-all.png` |
+| 删除失效绑定 | `docs/images/admin-clean-invalid.png` |
+| 自动刷新配置 | `docs/images/admin-auto-refresh.png` |
 ## 配置项
 
 | 配置项 | 默认值 | 说明 |
@@ -555,43 +589,6 @@ autoRefreshTime:
 
 > 图片位置：远行商人订阅排查截图。建议插入 `docs/images/faq-merchant-subscription.png`。
 
-## 图片占位清单
-
-建议将后续截图统一放在 `docs/images/` 目录下。
-
-| 功能 | 建议图片路径 |
-| --- | --- |
-| 插件总览 | `docs/images/overview.png` |
-| 服务启用 | `docs/images/setup-services.png` |
-| 插件配置 | `docs/images/config.png` |
-| 快速开始 | `docs/images/quick-start.png` |
-| 帮助菜单 | `docs/images/help-menu.png` |
-| QQ 登录 | `docs/images/account-qq-login.png` |
-| 微信登录 | `docs/images/account-wechat-login.png` |
-| 凭证导入 | `docs/images/account-import.png` |
-| 绑定列表 | `docs/images/account-bindings.png` |
-| 切换账号 | `docs/images/account-switch.png` |
-| 解绑账号 | `docs/images/account-unbind.png` |
-| 刷新凭证 | `docs/images/account-refresh.png` |
-| 个人档案 | `docs/images/query-profile.png` |
-| 战绩 | `docs/images/query-record.png` |
-| 背包 | `docs/images/query-package.png` |
-| 阵容推荐 | `docs/images/query-lineup.png` |
-| 阵容详情 | `docs/images/query-lineup-detail.png` |
-| 交换大厅 | `docs/images/query-exchange-hall.png` |
-| 远行商人 | `docs/images/merchant-current.png` |
-| 订阅远行商人 | `docs/images/merchant-subscribe.png` |
-| 取消订阅远行商人 | `docs/images/merchant-unsubscribe.png` |
-| 精灵 Wiki | `docs/images/wiki-pet.png` |
-| 技能 Wiki | `docs/images/wiki-skill.png` |
-| 精灵查蛋 | `docs/images/egg-search.png` |
-| 尺寸反查 | `docs/images/egg-size-search.png` |
-| 查蛋候选 | `docs/images/egg-candidates.png` |
-| 目标配种方案 | `docs/images/egg-want.png` |
-| 配种判定 | `docs/images/egg-pair.png` |
-| 刷新所有凭证 | `docs/images/admin-refresh-all.png` |
-| 删除失效绑定 | `docs/images/admin-clean-invalid.png` |
-| 自动刷新配置 | `docs/images/admin-auto-refresh.png` |
 
 ## 许可证
 
