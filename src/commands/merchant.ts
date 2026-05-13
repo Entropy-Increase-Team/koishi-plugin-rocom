@@ -235,7 +235,7 @@ export function register(deps: PluginDeps) {
   ctx.command(TEXT.merchant, '\u67e5\u770b\u8fdc\u884c\u5546\u4eba\u5546\u54c1')
     .action(async ({ session }) => {
       const res = await client.getMerchantInfo(ctx, true)
-      if (!res) return '\u83b7\u53d6\u8fdc\u884c\u5546\u4eba\u6570\u636e\u5931\u8d25\u3002'
+      if (!res) return `\u83b7\u53d6\u8fdc\u884c\u5546\u4eba\u6570\u636e\u5931\u8d25\uff1a${client.getLastErrorBrief()}`
 
       const { data, fallback } = buildMerchantRenderPayload(res)
       const png = await deps.renderer.renderHtml(ctx, 'yuanxing-shangren', data)

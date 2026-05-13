@@ -4,11 +4,14 @@ export declare class RocomClient {
     private apiKey;
     private timeout;
     private lastError;
+    private lastErrorBrief;
     constructor(baseUrl: string, apiKey: string, timeout?: number);
     private sanitizeUid;
     private wegameHeaders;
     private rocomHeaders;
     private formatHttpError;
+    private simplifyErrorMessage;
+    private shouldRetryIngameWithApiKey;
     private isSensitiveLogKey;
     private maskSensitiveValue;
     private sanitizeForLog;
@@ -32,6 +35,7 @@ export declare class RocomClient {
     getRole(ctx: Context, fwToken: string, accountType?: number, userIdentifier?: string): Promise<any>;
     getEvaluation(ctx: Context, fwToken: string, userIdentifier?: string): Promise<any>;
     getLastError(defaultMessage?: string): string;
+    getLastErrorBrief(defaultMessage?: string): string;
     private setLastError;
     getPetSummary(ctx: Context, fwToken: string, userIdentifier?: string): Promise<any>;
     getCollection(ctx: Context, fwToken: string, userIdentifier?: string): Promise<any>;

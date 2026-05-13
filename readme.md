@@ -10,20 +10,10 @@
 > 交流反馈：1097809141  
 [![npm](https://img.shields.io/npm/v/koishi-plugin-rocom?style=flat-square)](https://www.npmjs.com/package/koishi-plugin-rocom)
 
-Koishi 版洛克王国数据查询插件。插件基于 WeGame / 后端接口提供账号绑定、个人档案、战绩、背包、阵容、交换大厅、远行商人、查蛋配种、Wiki 查询等功能，并通过 `koishi-plugin-puppeteer` 将部分结果渲染为图片发送。
+Koishi 版洛克王国数据查询插件。插件基于 WeGame / 后端接口提供账号绑定、个人档案、战绩、背包、阵容、交换大厅、远行商人、查蛋配种、Wiki 查询等功能。
 
-## 功能概览
 
-| 分类 | 功能 |
-| --- | --- |
-| 账号管理 | QQ 扫码登录、微信扫码登录、凭证导入、绑定列表、切换账号、解绑、刷新凭证 |
-| 数据查询 | 档案、战绩、背包、阵容推荐、阵容详情、交换大厅 |
-| 商人提醒 | 远行商人查询、商品关键词订阅、全部订阅（每轮直推整图）、查看订阅、取消订阅 |
-| 百科查询 | 精灵 Wiki、技能 Wiki |
-| 查蛋配种 | 精灵查蛋、尺寸反查、候选结果、目标配种方案、配种判定 |
-| 管理维护 | 刷新所有凭证、删除失效绑定、自动刷新凭证 |
 
-> 图片位置：插件总览截图。建议插入 `docs/images/overview.png`。
 ### 安全免责声明
 
 - 绑定后的 `token`、`ticket`、扫码凭证等均属于敏感信息，请务必自行妥善保存。
@@ -40,23 +30,16 @@ Koishi 版洛克王国数据查询插件。插件基于 WeGame / 后端接口提
 
 如果图片渲染失败，插件会尽量回落为文字结果；但档案、战绩、背包、阵容、交换大厅、远行商人和查蛋配种等功能推荐配合 Puppeteer 使用。
 
-> 图片位置：Koishi 插件启用与服务依赖截图。建议插入 `docs/images/setup-services.png`。  
-  
-| 功能 | 图片 |
+| 功能 | 示例图片 |
 | --- | --- |
-| 刷新凭证 | `docs/images/account-refresh.png` |
-| 个人档案 | `docs/images/query-profile.png` |
-| 战绩 | `docs/images/query-record.png` |
-| 背包 | `docs/images/query-package.png` |
-| 阵容推荐 | `docs/images/query-lineup.png` |
-| 阵容详情 | `docs/images/query-lineup-detail.png` |
-| 交换大厅 | `docs/images/query-exchange-hall.png` |
-| 远行商人 | `docs/images/merchant-current.png` |
-| 精灵查蛋 | `docs/images/egg-search.png` |
-| 尺寸反查 | `docs/images/egg-size-search.png` |
-| 查蛋候选 | `docs/images/egg-candidates.png` |
-| 目标配种方案 | `docs/images/egg-want.png` |
-| 配种判定 | `docs/images/egg-pair.png` |
+| 帮助菜单 | ![菜单](docs/images/菜单.png) |
+| 个人档案 | ![档案](docs/images/洛克档案.png) |
+| 背包 | ![背包](docs/images/洛克背包.png) |
+| 阵容推荐 | ![阵容](docs/images/洛克阵容.png) |
+| 阵容详情 | ![阵容详情](docs/images/阵容详细.png) |
+| 远行商人 | ![远行商人](docs/images/远行商人.png) |
+| 家园 | ![家园](docs/images/洛克家园.png) |
+| 查蛋 | ![查蛋](docs/images/洛克查蛋.png) |
 
 ## 配置项
 
@@ -82,7 +65,6 @@ Koishi 版洛克王国数据查询插件。插件基于 WeGame / 后端接口提
 
 后台配置页中有单独的“图片压缩设置”分组。该功能会在图片发送前对 PNG 的 IDAT 数据做无损重压缩，不会改变图片尺寸、画质或透明度。若压缩失败，或压缩后文件没有变小，会自动发送原图。
 
-> 图片位置：插件配置页截图。建议插入 `docs/images/config.png`。
 
 ## 快速开始
 
@@ -98,7 +80,6 @@ Koishi 版洛克王国数据查询插件。插件基于 WeGame / 后端接口提
 洛克.查蛋 喵喵
 ```
 
-> 图片位置：首次使用流程截图。建议插入 `docs/images/quick-start.png`。
 
 ## 指令说明
 
@@ -112,7 +93,6 @@ Koishi 版洛克王国数据查询插件。插件基于 WeGame / 后端接口提
 
 请先使用 `洛克.QQ登录` 或 `洛克.微信登录` 绑定账号，再使用档案、战绩、背包、阵容、交换大厅等账号相关功能。
 
-> 图片位置：未绑定提示截图。建议插入 `docs/images/faq-not-bound.png`。
 
 ### 图片生成失败
 
@@ -125,13 +105,11 @@ Koishi 版洛克王国数据查询插件。插件基于 WeGame / 后端接口提
 
 插件在图片失败时会尽量发送文字回退结果。
 
-> 图片位置：图片生成失败排查截图。建议插入 `docs/images/faq-render-failed.png`。
 
 ### QQ 扫码登录超时
 
 二维码有效期约 2 分钟。超时后请重新发送 `洛克.QQ登录`。
 
-> 图片位置：登录超时提示截图。建议插入 `docs/images/faq-login-timeout.png`。
 
 ### 远行商人订阅没有推送
 
@@ -143,7 +121,6 @@ Koishi 版洛克王国数据查询插件。插件基于 WeGame / 后端接口提
 - 全部订阅模式（`订阅远行商人 全部`）在本轮商品为空时不会推送；每轮 `08:00 / 12:00 / 16:00 / 20:00` 只推一次，已推过的轮次不会重复。
 - Bot 是否有向目标群聊发送消息的权限。
 
-> 图片位置：远行商人订阅排查截图。建议插入 `docs/images/faq-merchant-subscription.png`。
 
 
 ## 许可证

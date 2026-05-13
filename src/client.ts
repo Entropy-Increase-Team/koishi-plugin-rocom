@@ -7,6 +7,7 @@ export class RocomClient {
   private apiKey: string
   private timeout: number
   private lastError = '接口异常'
+  private lastErrorBrief = '接口异常'
 
   constructor(baseUrl: string, apiKey: string, timeout = 15000) {
     this.baseUrl = baseUrl.replace(/\/$/, '')
@@ -55,6 +56,60 @@ export class RocomClient {
       return bodyMessage ? `${prefix}: ${bodyMessage}` : `${prefix}: ${response.statusText || err?.message || 'unknown'}`
     }
     return err?.message || String(e)
+  }
+
+  private simplifyErrorMessage(message: string): string {
+    const raw = String(message || '').replace(/\s+/g, ' ').trim()
+    if (!raw) return '接口异常'
+
+    if (/ETIMEDOUT|request timeout|timeout/i.test(raw)) {
+      return '请求超时，请稍后重试'
+    }
+    if (/ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|socket hang up|fetch failed|network error/i.test(raw)) {
+      return '网络连接异常，请稍后重试'
+    }
+    if (/底层凭证已失效|WeGame 凭证已失效|凭证已失效|token expired|framework token/i.test(raw)) {
+      return '登录凭证已失效，请重新登录'
+    }
+    if (/HTTP\s*5\d\d/i.test(raw)) {
+      return '服务暂时不可用，请稍后重试'
+    }
+    if (/HTTP\s*401/i.test(raw)) {
+      return '登录状态失效，请重新登录'
+    }
+    if (/API[\s_-]*Key/i.test(raw) && /未声明|默认拒绝访问|not declared|not allowed/i.test(raw)) {
+      return '接口权限受限，请稍后重试'
+    }
+    if (/HTTP\s*403/i.test(raw) && !/凭证|登录|token/i.test(raw)) {
+      return '权限不足，暂时无法访问该接口'
+    }
+
+    const stripped = raw
+      .replace(/^HTTP\s*\d+\s*:\s*/i, '')
+      .replace(/^(Error|RequestError)\s*:\s*/i, '')
+      .trim()
+    if (!stripped) return '接口异常'
+    return stripped.length > 120 ? `${stripped.slice(0, 117)}...` : stripped
+  }
+
+  private shouldRetryIngameWithApiKey(errorMessage: string): boolean {
+    if (!this.apiKey) return false
+    const message = String(errorMessage || '').trim()
+    if (!message) return true
+
+    if (/未声明\s*API\s*Key\s*权限|默认拒绝访问|API\s*Key.*not declared|API\s*Key.*not allowed/i.test(message)) {
+      return false
+    }
+
+    if (/缺少\s*API\s*Key|API\s*Key.*required|missing\s+api\s*key/i.test(message)) {
+      return true
+    }
+
+    if (/HTTP\s*(401|403)/i.test(message)) {
+      return true
+    }
+
+    return false
   }
 
   private isSensitiveLogKey(key: string): boolean {
@@ -305,7 +360,7 @@ export class RocomClient {
     let result = await requestOnce(false, Boolean(this.apiKey))
     if (result.status !== null) return { ...result, usedApiKey: false }
 
-    if (this.apiKey) {
+    if (this.shouldRetryIngameWithApiKey(this.getLastError())) {
       result = await requestOnce(true, false)
       if (result.status !== null) return { ...result, usedApiKey: true }
     }
@@ -388,8 +443,13 @@ export class RocomClient {
     return this.lastError || defaultMessage
   }
 
+  getLastErrorBrief(defaultMessage = '接口异常') {
+    return this.lastErrorBrief || defaultMessage
+  }
+
   private setLastError(message: string) {
     this.lastError = message || '接口异常'
+    this.lastErrorBrief = this.simplifyErrorMessage(message)
   }
 
   async getPetSummary(ctx: Context, fwToken: string, userIdentifier = '') {

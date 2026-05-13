@@ -785,7 +785,7 @@ export function register(deps: PluginDeps) {
         client.getBattleList(ctx, fwToken, 1, '', userIdentifier),
       ])
 
-      if (!roleRes?.role) return '获取角色档案失败，凭据可能已过期，请重新登录。'
+      if (!roleRes?.role) return `获取角色档案失败：${client.getLastErrorBrief('请重新登录后重试')}`
 
       const role = roleRes.role
       const ev = evalRes || {}
@@ -963,7 +963,7 @@ export function register(deps: PluginDeps) {
         client.getBattleList(ctx, fwToken, 4, '', userIdentifier),
       ])
 
-      if (!roleRes?.role) return '获取战绩数据失败。'
+      if (!roleRes?.role) return `获取战绩数据失败：${client.getLastErrorBrief('请稍后重试')}`
 
       const role = roleRes.role
       const bo = boRes || {}
@@ -1025,7 +1025,8 @@ export function register(deps: PluginDeps) {
         client.getPets(ctx, fwToken, petSubset, pageNo, 10, userIdentifier),
       ])
 
-      if (!roleRes?.role || !petRes?.pets) return '获取背包数据失败。'
+      if (!roleRes?.role) return `获取背包数据失败：${client.getLastErrorBrief('请重新登录后重试')}`
+      if (!petRes?.pets) return `获取背包数据失败：${client.getLastErrorBrief('请稍后重试')}`
 
       const role = roleRes.role
       const data = {
@@ -1078,7 +1079,7 @@ export function register(deps: PluginDeps) {
       }
 
       const res = await client.getLineupList(ctx, fwToken, pageNo, category, userIdentifier)
-      if (!res?.lineups) return '获取阵容数据失败。'
+      if (!res?.lineups) return `获取阵容数据失败：${client.getLastErrorBrief('请稍后重试')}`
 
       const data = {
         category: category || '热门推荐',
@@ -1114,7 +1115,7 @@ export function register(deps: PluginDeps) {
 
       const userIdentifier = session!.userId!
       const firstPageRes = await client.getLineupList(ctx, fwToken, 1, '', userIdentifier)
-      if (!firstPageRes?.lineups) return '获取阵容数据失败。'
+      if (!firstPageRes?.lineups) return `获取阵容数据失败：${client.getLastErrorBrief('请稍后重试')}`
 
       let targetLineup = (firstPageRes.lineups || []).find((lineup: any) => isTargetLineup(lineup, normalizedLineupId))
 
@@ -1165,7 +1166,7 @@ export function register(deps: PluginDeps) {
 
       const userIdentifier = session!.userId!
       const res = await client.getExchangePosters(ctx, fwToken, page, userIdentifier)
-      if (!res?.posters) return '获取交换大厅数据失败。'
+      if (!res?.posters) return `获取交换大厅数据失败：${client.getLastErrorBrief('请稍后重试')}`
 
       const data = {
         filterLabel: '全部',
@@ -1209,7 +1210,7 @@ export function register(deps: PluginDeps) {
     .action(async ({ session }, uid) => {
       if (!uid) return '请提供玩家 UID。用法：洛克.玩家 <UID>'
       const res = await client.ingamePlayerSearch(ctx, uid)
-      if (!res) return `玩家搜索失败：${client.getLastError()}`
+      if (!res) return `玩家搜索失败：${client.getLastErrorBrief()}`
       await sendImage(deps, session, 'player-search', buildPlayerSearchRenderData(res, uid), `【洛克玩家】UID ${uid}`)
     })
 
@@ -1223,7 +1224,7 @@ export function register(deps: PluginDeps) {
       }
       if (!targetUid) return '请提供玩家 UID，或先完成绑定后使用 洛克.家园。'
       const res = await client.ingameHomeInfo(ctx, targetUid)
-      if (!res) return `家园查询失败：${client.getLastError()}`
+      if (!res) return `家园查询失败：${client.getLastErrorBrief()}`
       await sendImage(deps, session, 'home', buildHomeRenderData(deps, res, targetUid), `【洛克家园】UID ${targetUid}`)
     })
 
@@ -1232,7 +1233,7 @@ export function register(deps: PluginDeps) {
     .action(async ({ session }, shopId) => {
       if (!shopId) return '请提供商店 ID。用法：洛克.商店 <shop_id>'
       const res = await client.ingameMerchantInfo(ctx, shopId)
-      if (!res) return `商店查询失败：${client.getLastError()}`
+      if (!res) return `商店查询失败：${client.getLastErrorBrief()}`
       await sendImage(deps, session, 'ingame-shop', buildShopRenderData(res, shopId), `【洛克商店】shop_id=${shopId}`)
     })
 
@@ -1243,7 +1244,7 @@ export function register(deps: PluginDeps) {
       const fwToken = await getPrimaryToken(deps, session!.userId!)
       if (!fwToken) return notLoggedInHint()
       const res = await client.getFriendship(ctx, fwToken, userIds, session!.userId!)
-      if (!res) return `好友关系查询失败：${client.getLastError()}`
+      if (!res) return `好友关系查询失败：${client.getLastErrorBrief()}`
       await sendImage(deps, session, 'friendship', buildFriendshipRenderData(res, userIds), `【好友关系】${userIds}`)
     })
 
@@ -1257,8 +1258,8 @@ export function register(deps: PluginDeps) {
         client.getStudentState(ctx, fwToken, accountType, userIdentifier),
         client.getStudentPerks(ctx, fwToken, area, accountType, userIdentifier),
       ])
-      if (!stateRes) return `学生认证状态查询失败：${client.getLastError()}`
-      if (!perksRes) return `学生活动福利查询失败：${client.getLastError()}`
+      if (!stateRes) return `学生认证状态查询失败：${client.getLastErrorBrief()}`
+      if (!perksRes) return `学生活动福利查询失败：${client.getLastErrorBrief()}`
       await sendImage(deps, session, 'student', buildStudentRenderData(stateRes, perksRes, area, accountType), '【洛克学生】认证与福利信息')
     })
 
@@ -1289,6 +1290,5 @@ export function register(deps: PluginDeps) {
     ctx.setInterval(() => checkHomeSubscriptions(deps).catch(err => logger.warn(`家园订阅检查失败: ${err}`)), Math.max(1, deps.config.homeSubscriptionIntervalMinutes || 5) * 60000)
   }
 }
-
 
 
