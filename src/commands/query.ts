@@ -305,6 +305,640 @@ function homePetIcon(petId: any, iconUrl = ''): string {
   return `https://game.gtimg.cn/images/rocom/rocodata/jingling/${assetId}/icon.png`
 }
 
+function homePetImage(petId: any, imageUrl = ''): string {
+  if (imageUrl) return imageUrl
+  let assetId = Number(String(petId || '0'))
+  if (!Number.isFinite(assetId) || assetId <= 0) return ''
+  if (assetId < 3000) assetId += 3000
+  return `https://game.gtimg.cn/images/rocom/rocodata/jingling/${assetId}/image.png`
+}
+
+type PanelSkillItem = {
+  id: string
+  name: string
+  isEquipped: boolean
+  cost: string
+  power: string
+  typeLabel: string
+  iconUrl: string
+  description: string
+}
+
+type PanelAttributeItem = {
+  key: string
+  label: string
+  value: number
+  talent: number
+  effortAdd: number
+}
+
+type PanelFeature = {
+  id: string
+  name: string
+  desc: string
+}
+
+type PanelPetItem = {
+  gid: string
+  petId: string
+  name: string
+  level: number
+  gender: string
+  energy: number
+  mutationType: number
+  mutationLabel: string
+  bloodId: string
+  bloodlineLabel: string
+  elementLabels: string[]
+  elementIcons: string[]
+  iconUrl: string
+  imageUrl: string
+  feature: PanelFeature
+  equipSkills: PanelSkillItem[]
+  skills: PanelSkillItem[]
+  attributes: PanelAttributeItem[]
+}
+
+type PanelPetCacheRecord = {
+  uid: string
+  pets: PanelPetItem[]
+  updatedAt: number
+}
+
+type PanelPetCacheData = Record<string, PanelPetCacheRecord>
+
+const PANEL_PET_STAT_DEFS = [
+  { key: 'hp', label: 'HP', addiType: 1, aliases: ['hp'] },
+  { key: 'attack', label: '物攻', addiType: 2, aliases: ['attack', 'atk'] },
+  { key: 'special_attack', label: '魔攻', addiType: 3, aliases: ['special_attack', 'magic_attack', 'sp_attack'] },
+  { key: 'defense', label: '物防', addiType: 4, aliases: ['defense', 'def'] },
+  { key: 'special_defense', label: '魔防', addiType: 5, aliases: ['special_defense', 'magic_defense', 'sp_defense'] },
+  { key: 'speed', label: '速度', addiType: 6, aliases: ['speed', 'spd'] },
+]
+
+const PANEL_PET_CACHE_PATH = path.join('data', 'rocom', 'rocom_pet_panel_cache.json')
+const PANEL_EMPTY_FEATURE: PanelFeature = { id: '', name: '暂无特性', desc: '当前接口未返回特性描述。' }
+const PANEL_EMPTY_SKILL_HINT = '当前接口未返回技能详情。'
+
+let panelPetCacheMem: PanelPetCacheData | null = null
+
+function panelPetCacheFilePath(deps: PluginDeps) {
+  return path.join(deps.ctx.baseDir, PANEL_PET_CACHE_PATH)
+}
+
+function ensureBloodlineLabel(raw: string, mutationLabel: string): string {
+  if (raw && raw !== '未知血脉') return raw
+  return mutationLabel === '普通' ? '普通' : `${mutationLabel}系`
+}
+
+function loadPanelPetCache(deps: PluginDeps): PanelPetCacheData {
+  if (panelPetCacheMem) return panelPetCacheMem
+  const filePath = panelPetCacheFilePath(deps)
+  try {
+    if (!fs.existsSync(filePath)) {
+      panelPetCacheMem = {}
+      return panelPetCacheMem
+    }
+    const text = fs.readFileSync(filePath, 'utf-8')
+    const parsed = JSON.parse(text)
+    panelPetCacheMem = parsed && typeof parsed === 'object' ? parsed : {}
+  } catch (err) {
+    logger.warn(`加载精灵面板缓存失败: ${err}`)
+    panelPetCacheMem = {}
+  }
+  return panelPetCacheMem
+}
+
+function savePanelPetCache(deps: PluginDeps, data: PanelPetCacheData) {
+  const filePath = panelPetCacheFilePath(deps)
+  const dir = path.dirname(filePath)
+  fs.mkdirSync(dir, { recursive: true })
+  const tempPath = `${filePath}.tmp`
+  fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf-8')
+  fs.renameSync(tempPath, filePath)
+  panelPetCacheMem = data
+}
+
+function readPanelPetCache(deps: PluginDeps, uid: string): PanelPetCacheRecord | null {
+  const cache = loadPanelPetCache(deps)
+  return cache[String(uid)] || null
+}
+
+function writePanelPetCache(deps: PluginDeps, uid: string, pets: PanelPetItem[]) {
+  const cache = loadPanelPetCache(deps)
+  cache[String(uid)] = {
+    uid: String(uid),
+    pets,
+    updatedAt: Math.floor(Date.now() / 1000),
+  }
+  savePanelPetCache(deps, cache)
+  return cache[String(uid)]
+}
+
+function toNumber(value: any, fallback = 0): number {
+  const num = Number(value)
+  return Number.isFinite(num) ? num : fallback
+}
+
+function normalizeMutationLabel(mutationType: number): string {
+  if (mutationType === 9) return '了不起'
+  if (mutationType === 8) return '炫彩'
+  if (mutationType === 1) return '异色'
+  return '普通'
+}
+
+function normalizeGender(value: any): string {
+  const text = String(value ?? '').trim()
+  if (!text) return '未知'
+  if (['1', 'male', 'man', 'boy', 'm', '公'].includes(text.toLowerCase())) return '公'
+  if (['2', 'female', 'woman', 'girl', 'f', '母'].includes(text.toLowerCase())) return '母'
+  if (text === '0') return '无'
+  return text
+}
+
+function pickFirstNonEmpty(...values: any[]): string {
+  for (const value of values) {
+    const text = String(value ?? '').trim()
+    if (text) return text
+  }
+  return ''
+}
+
+function uniqueStrings(items: Array<string | undefined | null>): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const item of items) {
+    const text = String(item || '').trim()
+    if (!text || seen.has(text)) continue
+    seen.add(text)
+    out.push(text)
+  }
+  return out
+}
+
+function normalizeSkillItem(raw: any): PanelSkillItem {
+  const id = pickFirstNonEmpty(raw?.id, raw?.skill_id, raw?.skillId)
+  return {
+    id,
+    name: pickFirstNonEmpty(raw?.name, raw?.skill_name, raw?.skillName) || (id ? `技能#${id}` : '未知技能'),
+    isEquipped: Boolean(raw?.is_equipped ?? raw?.equipped ?? raw?.isEquipped),
+    cost: pickFirstNonEmpty(raw?.cost, raw?.energy_cost, raw?.consume, raw?.spend) || '-',
+    power: pickFirstNonEmpty(raw?.power, raw?.damage, raw?.power_value, raw?.damage_value) || '-',
+    typeLabel: pickFirstNonEmpty(raw?.element, raw?.type_name, raw?.typeName, raw?.attribute_name, raw?.attributeName) || '未知',
+    iconUrl: pickFirstNonEmpty(raw?.skill_img_url, raw?.icon, raw?.icon_url, raw?.img_url, raw?.image_url),
+    description: pickFirstNonEmpty(raw?.desc, raw?.description, raw?.detail),
+  }
+}
+
+function parsePanelSkills(raw: any): { feature: PanelFeature; equipSkills: PanelSkillItem[]; skills: PanelSkillItem[] } {
+  const items: any[] = []
+  const pushAll = (input: any) => {
+    if (!input) return
+    if (Array.isArray(input)) {
+      for (const item of input) items.push(item)
+      return
+    }
+    if (typeof input === 'object') {
+      items.push(input)
+    }
+  }
+
+  pushAll(raw?.display_info?.skill?.skill_data)
+  pushAll(raw?.display_info?.skill_data)
+  pushAll(raw?.display_info?.skills)
+  pushAll(raw?.display_info?.skills_info)
+  pushAll(raw?.skill?.skill_data)
+  pushAll(raw?.skill_data)
+  pushAll(raw?.skills)
+  pushAll(raw?.skills_info)
+
+  const featureCandidates: PanelFeature[] = []
+  const skills: PanelSkillItem[] = []
+  const equipSkills: PanelSkillItem[] = []
+  const seenSkill = new Set<string>()
+
+  const appendSkill = (skill: PanelSkillItem) => {
+    const key = `${skill.name}#${skill.id}`
+    if (seenSkill.has(key)) return
+    seenSkill.add(key)
+    skills.push(skill)
+    if (skill.isEquipped) equipSkills.push(skill)
+  }
+
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue
+    const type = toNumber(item?.type, 1)
+    if (type === 2) {
+      featureCandidates.push({
+        id: pickFirstNonEmpty(item?.id, item?.feature_id, item?.featureId),
+        name: pickFirstNonEmpty(item?.name, item?.feature_name, item?.featureName) || '未知特性',
+        desc: pickFirstNonEmpty(item?.desc, item?.description, item?.feature_desc, item?.featureDesc),
+      })
+      continue
+    }
+    appendSkill(normalizeSkillItem(item))
+  }
+
+  if (!skills.length) {
+    const fallbackSkills = Array.isArray(raw?.display_info?.equip_skills) ? raw.display_info.equip_skills : []
+    for (const skill of fallbackSkills) {
+      appendSkill({ ...normalizeSkillItem(skill), isEquipped: true })
+    }
+    const normalSkills = Array.isArray(raw?.display_info?.skills) ? raw.display_info.skills : []
+    for (const skill of normalSkills) appendSkill(normalizeSkillItem(skill))
+  }
+
+  const featureRaw = raw?.display_info?.feature || raw?.feature || raw?.feature_info || raw?.featureInfo
+  if (featureRaw && typeof featureRaw === 'object') {
+    featureCandidates.unshift({
+      id: pickFirstNonEmpty(featureRaw?.id, featureRaw?.feature_id, featureRaw?.featureId),
+      name: pickFirstNonEmpty(featureRaw?.name, featureRaw?.feature_name, featureRaw?.featureName) || '未知特性',
+      desc: pickFirstNonEmpty(featureRaw?.desc, featureRaw?.description, featureRaw?.feature_desc, featureRaw?.featureDesc),
+    })
+  }
+
+  const feature = featureCandidates.find(item => item.name && item.name !== '未知特性') || featureCandidates[0] || PANEL_EMPTY_FEATURE
+  if (!equipSkills.length && skills.length) {
+    equipSkills.push(...skills.slice(0, Math.min(4, skills.length)).map(item => ({ ...item, isEquipped: true })))
+  }
+
+  return { feature, equipSkills, skills }
+}
+
+function extractAttributeValue(source: any, addiMap: Record<number, number>, def: { aliases: string[]; addiType: number }) {
+  let value = addiMap[def.addiType]
+  let talent = 0
+  let effortAdd = 0
+  for (const key of def.aliases) {
+    const attr = source?.[key]
+    if (!attr || typeof attr !== 'object') continue
+    if (!value) value = toNumber(attr.value, value)
+    talent = toNumber(attr.talent, talent)
+    effortAdd = toNumber(attr.effort_add, effortAdd)
+  }
+  return { value, talent, effortAdd }
+}
+
+function parsePanelAttributes(raw: any): PanelAttributeItem[] {
+  const display = raw?.display_info || {}
+  const attrSource = display?.attribute_info || raw?.attribute_info || {}
+  const addiData = Array.isArray(display?.attribute_new_info?.addi_attr_data)
+    ? display.attribute_new_info.addi_attr_data
+    : Array.isArray(raw?.attribute_new_info?.addi_attr_data)
+      ? raw.attribute_new_info.addi_attr_data
+      : []
+
+  const addiMap: Record<number, number> = {}
+  for (const item of addiData) {
+    const type = toNumber(item?.type)
+    if (!type) continue
+    addiMap[type] = toNumber(item?.addi_attr)
+  }
+
+  return PANEL_PET_STAT_DEFS.map(def => {
+    const { value, talent, effortAdd } = extractAttributeValue(attrSource, addiMap, def)
+    return {
+      key: def.key,
+      label: def.label,
+      value,
+      talent,
+      effortAdd,
+    }
+  })
+}
+
+function parsePanelPetItem(raw: any, index: number): PanelPetItem | null {
+  if (!raw || typeof raw !== 'object') return null
+  const homePet = raw?.home_pet_info && typeof raw.home_pet_info === 'object' ? raw.home_pet_info : raw
+  const display = raw?.display_info && typeof raw.display_info === 'object' ? raw.display_info : {}
+  const petId = pickFirstNonEmpty(
+    display?.base_conf_id,
+    homePet?.pet_cfg_id,
+    homePet?.pet_id,
+    raw?.pet_cfg_id,
+    raw?.pet_id,
+    raw?.pet_base_id,
+  )
+  if (!petId || petId === '0') return null
+
+  const gid = pickFirstNonEmpty(homePet?.pet_gid, raw?.pet_gid, raw?.gid, raw?.id, index + 1)
+  const name = pickFirstNonEmpty(display?.name, homePet?.name, homePet?.pet_name, raw?.name, raw?.pet_name) || `精灵 ${petId}`
+  const level = toNumber(display?.level ?? raw?.level ?? homePet?.level, 1)
+  const mutationType = toNumber(display?.mutation_type ?? raw?.mutation_type ?? homePet?.mutation_type, 0)
+  const bloodId = pickFirstNonEmpty(display?.blood_id, raw?.blood_id, homePet?.blood_id, homePet?.bloodline_id)
+
+  const petTypesInfo = Array.isArray(display?.pet_types_info)
+    ? display.pet_types_info
+    : Array.isArray(raw?.pet_types_info)
+      ? raw.pet_types_info
+      : []
+  const elementLabels = uniqueStrings(petTypesInfo.map((item: any) => pickFirstNonEmpty(item?.name, item?.type_name, item?.label)))
+  const elementIcons = uniqueStrings(petTypesInfo.map((item: any) => pickFirstNonEmpty(item?.icon, item?.icon_url, item?.img_url)))
+  const bloodlineLabelRaw = pickFirstNonEmpty(
+    display?.bloodline_info?.name,
+    display?.bloodline_info?.title,
+    raw?.bloodline_info?.name,
+    raw?.bloodline_info?.title,
+    bloodId ? `血脉 ${bloodId}` : '',
+  ) || '未知血脉'
+
+  const { feature, equipSkills, skills } = parsePanelSkills(raw)
+  const attributes = parsePanelAttributes(raw)
+  const iconUrl = homePetIcon(petId, pickFirstNonEmpty(display?.pet_icon_url, raw?.pet_icon_url, raw?.icon_url, raw?.pet_img_url))
+  const imageUrl = homePetImage(petId, pickFirstNonEmpty(display?.pet_img_url, raw?.pet_img_url, raw?.image_url, raw?.icon_url))
+
+  const mutationLabel = normalizeMutationLabel(mutationType)
+
+  return {
+    gid,
+    petId,
+    name,
+    level,
+    gender: normalizeGender(display?.gender ?? raw?.gender ?? homePet?.gender),
+    energy: toNumber(display?.energy ?? raw?.energy ?? homePet?.energy, 0),
+    mutationType,
+    mutationLabel,
+    bloodId,
+    bloodlineLabel: ensureBloodlineLabel(bloodlineLabelRaw, mutationLabel),
+    elementLabels,
+    elementIcons,
+    iconUrl,
+    imageUrl,
+    feature,
+    equipSkills,
+    skills,
+    attributes,
+  }
+}
+
+function normalizeMutationBySubset(subset: number): number {
+  if (subset === 1) return 9
+  if (subset === 2) return 1
+  if (subset === 3) return 8
+  return 0
+}
+
+function parseMutationTypeFromPet(pet: any, subset: number): number {
+  const direct = toNumber(pet?.pet_mutation ?? pet?.mutation_type ?? pet?.mutation ?? pet?.petMutation, NaN)
+  if (Number.isFinite(direct) && direct >= 0) return direct
+  return normalizeMutationBySubset(subset)
+}
+
+function panelPetItemFromBagPet(raw: any, subset: number, index: number): PanelPetItem | null {
+  if (!raw || typeof raw !== 'object') return null
+  const petId = pickFirstNonEmpty(raw?.pet_base_id, raw?.pet_id, raw?.id)
+  if (!petId || petId === '0') return null
+  const mutationType = parseMutationTypeFromPet(raw, subset)
+  const mutationLabel = normalizeMutationLabel(mutationType)
+  const petNameRaw = pickFirstNonEmpty(raw?.pet_name, raw?.name) || `精灵 ${petId}`
+  const [baseName] = petNameRaw.split('&')
+  const level = toNumber(raw?.pet_level ?? raw?.level, 1)
+  const types = Array.isArray(raw?.pet_types_info) ? raw.pet_types_info : []
+  const elementLabels = uniqueStrings(types.map((item: any) => pickFirstNonEmpty(item?.name, item?.type_name)))
+  const elementIcons = uniqueStrings(types.map((item: any) => pickFirstNonEmpty(item?.icon, item?.icon_url)))
+  const iconFromImage = String(raw?.pet_img_url || '').replace('/image.png', '/icon.png')
+  const iconUrl = homePetIcon(petId, iconFromImage)
+  const imageUrl = homePetImage(petId, pickFirstNonEmpty(raw?.pet_img_url, raw?.image_url))
+  const gid = pickFirstNonEmpty(raw?.pet_gid, raw?.gid, raw?.id, `${subset}-${index + 1}`)
+
+  return {
+    gid,
+    petId,
+    name: baseName || petNameRaw,
+    level,
+    gender: '未知',
+    energy: 0,
+    mutationType,
+    mutationLabel,
+    bloodId: '',
+    bloodlineLabel: ensureBloodlineLabel('', mutationLabel),
+    elementLabels,
+    elementIcons,
+    iconUrl,
+    imageUrl,
+    feature: PANEL_EMPTY_FEATURE,
+    equipSkills: [],
+    skills: [],
+    attributes: PANEL_PET_STAT_DEFS.map((def) => ({
+      key: def.key,
+      label: def.label,
+      value: 0,
+      talent: 0,
+      effortAdd: 0,
+    })),
+  }
+}
+
+function panelRefreshErrorHint(client: any): string {
+  const detail = client.getLastErrorBrief('请稍后重试')
+  if (/api key|access token|anonymous token|认证凭证|未授权|401|403/i.test(String(detail))) {
+    return '刷新失败：当前环境缺少 API 凭证，且本账号未登录，无法拉取面板数据。请先执行 洛克.QQ登录 或 洛克.微信登录。'
+  }
+  return `刷新失败：${detail}`
+}
+
+async function fetchPanelPetsFromBag(deps: PluginDeps, userId: string): Promise<PanelPetItem[] | null> {
+  const fwToken = await getPrimaryToken(deps, userId)
+  if (!fwToken) return null
+  const userIdentifier = userId
+
+  const listTasks: Promise<any>[] = []
+  for (const subset of [0, 1, 2, 3]) {
+    listTasks.push(deps.client.getPets(deps.ctx, fwToken, subset, 1, 200, userIdentifier))
+  }
+
+  const listRes = await Promise.all(listTasks)
+  const pets: PanelPetItem[] = []
+  const dedup = new Set<string>()
+  listRes.forEach((res, idx) => {
+    const subset = idx
+    const rows = Array.isArray(res?.pets) ? res.pets : []
+    rows.forEach((raw: any, rowIndex: number) => {
+      const pet = panelPetItemFromBagPet(raw, subset, rowIndex)
+      if (!pet) return
+      const key = `${pet.petId}#${pet.name}#${pet.mutationType}`
+      if (dedup.has(key)) return
+      dedup.add(key)
+      pets.push(pet)
+    })
+  })
+
+  return pets
+}
+
+function extractPanelPetSources(homeInfo: any): any[] {
+  const cell = homeCellInfo(homeInfo)
+  const sources: any[] = []
+  const pushAll = (value: any) => {
+    if (!Array.isArray(value)) return
+    for (const item of value) sources.push(item)
+  }
+
+  pushAll(homeInfo?.home_pets)
+  pushAll(cell?.home_pets)
+  pushAll(cell?.home_pet_info?.home_pet_list)
+  pushAll(homeInfo?.friend_cell_home_brief_info?.home_pets)
+
+  return sources
+}
+
+function buildPanelPetList(homeInfo: any): PanelPetItem[] {
+  const sources = extractPanelPetSources(homeInfo)
+  const pets: PanelPetItem[] = []
+  const dedup = new Set<string>()
+  for (let i = 0; i < sources.length; i++) {
+    const pet = parsePanelPetItem(sources[i], i)
+    if (!pet) continue
+    const key = `${pet.gid}#${pet.petId}`
+    if (dedup.has(key)) continue
+    dedup.add(key)
+    pets.push(pet)
+  }
+  return pets
+}
+
+function panelUidFromBinding(deps: PluginDeps, session: any, uid = ''): string {
+  const inputUid = String(uid || '').trim()
+  if (inputUid) return inputUid
+  return String(deps.userMgr.getPrimaryBinding(session?.userId || '')?.role_id || '')
+}
+
+function parsePanelPetQuery(rawQuery: string) {
+  const query = String(rawQuery || '').trim()
+  const gid = (query.match(/\d+/)?.[0] || '').trim()
+  const name = query.replace(/\d+/g, '').trim()
+  return { query, gid, name }
+}
+
+function findPanelPets(pets: PanelPetItem[], queryRaw: string): PanelPetItem[] {
+  const parsed = parsePanelPetQuery(queryRaw)
+  if (!parsed.query) return []
+
+  let candidates = pets
+  if (parsed.gid) {
+    candidates = candidates.filter(pet => String(pet.gid) === parsed.gid)
+  }
+  if (parsed.name) {
+    const exact = candidates.filter(pet => pet.name === parsed.name)
+    if (exact.length) return exact
+    const normalized = parsed.name.toLowerCase()
+    candidates = candidates.filter((pet) => String(pet.name || '').toLowerCase().includes(normalized))
+  }
+  if (!parsed.gid && !parsed.name) {
+    const normalized = parsed.query.toLowerCase()
+    candidates = candidates.filter((pet) =>
+      String(pet.gid).includes(parsed.query)
+      || String(pet.petId).includes(parsed.query)
+      || String(pet.name || '').toLowerCase().includes(normalized),
+    )
+  }
+  return candidates
+}
+
+function panelPetListFallback(uid: string, pets: PanelPetItem[], updatedAtText: string) {
+  const lines = [
+    `【UID ${uid} 精灵面板已刷新】`,
+    `刷新时间：${updatedAtText}`,
+    `共 ${pets.length} 只精灵`,
+  ]
+  for (const pet of pets.slice(0, 40)) {
+    const tags = [...pet.elementLabels, pet.bloodlineLabel].filter(Boolean).join(' / ')
+    lines.push(`- ${pet.name} (GID:${pet.gid}) Lv.${pet.level} ${pet.mutationLabel}${tags ? ` | ${tags}` : ''}`)
+  }
+  if (pets.length > 40) lines.push(`... 其余 ${pets.length - 40} 只请使用图片面板查看`)
+  lines.push('查询详情：洛克.精灵面板 <名称或GID> [UID]')
+  return lines.join('\n')
+}
+
+function panelPetDetailFallback(uid: string, pet: PanelPetItem, cacheUpdatedAtText: string) {
+  const lines = [
+    `【精灵面板】${pet.name} (GID:${pet.gid})`,
+    `UID: ${uid} | 刷新时间: ${cacheUpdatedAtText}`,
+    `等级: Lv.${pet.level} | 稀有: ${pet.mutationLabel} | 血脉: ${pet.bloodlineLabel}`,
+    `属性: ${pet.elementLabels.join(' / ') || '未知'}`,
+  ]
+  if (pet.feature?.name) {
+    lines.push(`特性: ${pet.feature.name}`)
+    if (pet.feature.desc) lines.push(`说明: ${pet.feature.desc}`)
+  }
+  if (pet.equipSkills.length) {
+    lines.push('已装备技能:')
+    for (const skill of pet.equipSkills.slice(0, 6)) {
+      lines.push(`- ${skill.name} [${skill.typeLabel}] 能耗:${skill.cost} 威力:${skill.power}`)
+    }
+  }
+  return lines.join('\n')
+}
+
+function panelPetListData(uid: string, pets: PanelPetItem[], updatedAtText: string) {
+  return {
+    title: '精灵面板',
+    subtitle: `UID ${uid} · 共 ${pets.length} 只精灵`,
+    updatedAtText,
+    cards: pets.map((pet) => ({
+      gid: pet.gid,
+      petId: pet.petId,
+      name: pet.name,
+      level: pet.level,
+      mutationLabel: pet.mutationLabel,
+      bloodlineLabel: pet.bloodlineLabel,
+      iconUrl: pet.iconUrl,
+      elementLabels: pet.elementLabels,
+      elementIcons: pet.elementIcons,
+    })),
+    commandHint: '洛克.精灵面板 <名称或GID> [UID] | 洛克.刷新面板 [UID]',
+  }
+}
+
+function panelPetDetailData(uid: string, pet: PanelPetItem, updatedAtText: string) {
+  return {
+    title: '精灵详情面板',
+    subtitle: `UID ${uid} · GID ${pet.gid}`,
+    updatedAtText,
+    pet,
+    hasEquipSkills: pet.equipSkills.length > 0,
+    hasSkills: pet.skills.length > 0,
+    emptySkillHint: PANEL_EMPTY_SKILL_HINT,
+    commandHint: '再次刷新：洛克.刷新面板 [UID] | 查询其他精灵：洛克.精灵面板 <名称或GID> [UID]',
+  }
+}
+
+async function refreshPanelPets(deps: PluginDeps, uid: string, userId = '') {
+  const res = await deps.client.ingameHomeInfo(deps.ctx, uid, 20000)
+  if (res) {
+    const homeInfo = homeInfoPayload(res)
+    const pets = buildPanelPetList(homeInfo)
+    return writePanelPetCache(deps, uid, pets)
+  }
+
+  // 无 ingame 凭证时，自动降级到已登录账号的背包接口
+  const fallbackUserId = String(userId || '').trim()
+  const fallbackPets = fallbackUserId ? await fetchPanelPetsFromBag(deps, fallbackUserId) : null
+  if (fallbackPets && fallbackPets.length) {
+    return writePanelPetCache(deps, uid, fallbackPets)
+  }
+  return null
+}
+
+async function resolvePanelPets(deps: PluginDeps, uid: string, userId = '', forceRefresh = false) {
+  if (forceRefresh) {
+    const refreshed = await refreshPanelPets(deps, uid, userId)
+    if (refreshed) return { record: refreshed, refreshed: true }
+    return { record: null, refreshed: true }
+  }
+
+  const cache = readPanelPetCache(deps, uid)
+  if (cache?.pets?.length) return { record: cache, refreshed: false }
+  const refreshed = await refreshPanelPets(deps, uid, userId)
+  return { record: refreshed, refreshed: true }
+}
+
+function formatPanelUpdatedAt(ts: number) {
+  const value = Number(ts)
+  if (!Number.isFinite(value) || value <= 0) return new Date().toLocaleString('zh-CN')
+  return new Date(value * 1000).toLocaleString('zh-CN')
+}
+
 function extractHomePet(raw: any, index: number, guard = false) {
   if (!raw || typeof raw !== 'object') return null
   const homePet = raw.home_pet_info && typeof raw.home_pet_info === 'object' ? raw.home_pet_info : raw
@@ -1228,6 +1862,90 @@ export function register(deps: PluginDeps) {
       await sendImage(deps, session, 'home', buildHomeRenderData(deps, res, targetUid), `【洛克家园】UID ${targetUid}`)
     })
 
+  ctx.command('洛克').subcommand('.刷新面板 [uid:string]', '刷新指定 UID 的精灵面板缓存')
+    .alias('洛克刷新面板')
+    .alias('刷新面板')
+    .alias('刷新精灵')
+    .alias('强制刷新')
+    .action(async ({ session }, uid = '') => {
+      const targetUid = panelUidFromBinding(deps, session, uid)
+      if (!targetUid) return '请提供 UID，或先绑定账号后再使用 洛克.刷新面板。'
+      if (!/^\d+$/.test(targetUid)) return '请输入正确的 UID 格式。'
+
+      await session?.send?.(`正在刷新 UID ${targetUid} 的精灵面板，请稍候...`)
+      const record = await refreshPanelPets(deps, targetUid, session?.userId || '')
+      if (!record) return panelRefreshErrorHint(client)
+
+      const updatedAtText = formatPanelUpdatedAt(record.updatedAt)
+      const data = panelPetListData(targetUid, record.pets, updatedAtText)
+      const fallback = panelPetListFallback(targetUid, record.pets, updatedAtText)
+      await sendImage(deps, session, 'pet-panel', data, fallback)
+    })
+
+  ctx.command('洛克').subcommand('.精灵面板 [query:text] [uid:string]', '查询精灵面板详情（按名称或GID），不填参数则显示精灵列表')
+    .alias('洛克精灵面板')
+    .alias('精灵面板')
+    .alias('面板')
+    .alias('查询精灵面板')
+    .alias('查看面板')
+    .action(async ({ session }, query, uid = '') => {
+      const queryText = String(query || '').trim()
+
+      const targetUid = panelUidFromBinding(deps, session, uid)
+      if (!targetUid) return '请提供 UID，或先绑定账号后再使用 洛克.精灵面板。'
+      if (!/^\d+$/.test(targetUid)) return '请输入正确的 UID 格式。'
+
+      const { record } = await resolvePanelPets(deps, targetUid, session?.userId || '', false)
+      if (!record) return panelRefreshErrorHint(client)
+      if (!record.pets.length) return `UID ${targetUid} 当前没有可用精灵数据，请先执行 洛克.刷新面板。`
+
+      if (!queryText) {
+        const updatedAtText = formatPanelUpdatedAt(record.updatedAt)
+        const data = panelPetListData(targetUid, record.pets, updatedAtText)
+        const fallback = panelPetListFallback(targetUid, record.pets, updatedAtText)
+        await sendImage(deps, session, 'pet-panel', data, fallback)
+        return
+      }
+
+      const matched = findPanelPets(record.pets, queryText)
+      if (!matched.length) {
+        return [
+          `未在 UID ${targetUid} 的面板缓存中找到「${queryText}」。`,
+          '可先执行：洛克.刷新面板 [UID]',
+          '或尝试更精确名称 / GID。',
+        ].join('\n')
+      }
+
+      let selected: PanelPetItem | null = null
+      if (matched.length === 1) {
+        selected = matched[0]
+      } else {
+        const optionLines = matched.slice(0, 20).map((pet, index) =>
+          `${index + 1}. ${pet.name} (GID:${pet.gid}) Lv.${pet.level} ${pet.mutationLabel}`,
+        )
+        await session?.send?.([
+          `检测到 ${matched.length} 个候选，请在 60 秒内回复序号选择：`,
+          ...optionLines,
+          '超时将默认选择第 1 个。',
+        ].join('\n'))
+        try {
+          const input = await session?.prompt?.(60 * 1000)
+          const choice = Number(String(input || '').trim())
+          if (Number.isFinite(choice) && choice >= 1 && choice <= Math.min(matched.length, 20)) {
+            selected = matched[choice - 1]
+          }
+        } catch {
+          // Ignore prompt failures and fall back to default choice.
+        }
+        if (!selected) selected = matched[0]
+      }
+
+      const updatedAtText = formatPanelUpdatedAt(record.updatedAt)
+      const data = panelPetDetailData(targetUid, selected, updatedAtText)
+      const fallback = panelPetDetailFallback(targetUid, selected, updatedAtText)
+      await sendImage(deps, session, 'pet-panel-detail', data, fallback)
+    })
+
   ctx.command('洛克').subcommand('.商店 <shopId:string>', '通过 ingame 接口查询商店信息')
     .alias('洛克商店')
     .action(async ({ session }, shopId) => {
@@ -1290,5 +2008,3 @@ export function register(deps: PluginDeps) {
     ctx.setInterval(() => checkHomeSubscriptions(deps).catch(err => logger.warn(`家园订阅检查失败: ${err}`)), Math.max(1, deps.config.homeSubscriptionIntervalMinutes || 5) * 60000)
   }
 }
-
-

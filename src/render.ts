@@ -32,40 +32,57 @@ export class Renderer {
   constructor(private resPath: string) {}
 
   resourceUrl(relativePath: string) {
-    return pathToFileURL(path.join(this.getResourceRoot(), relativePath)).href
+    return pathToFileURL(path.join(this.getPreferredResourceRoot(), relativePath)).href
   }
 
-  private getResourceRoot() {
+  private getPreferredResourceRoot() {
     const builtRoot = path.join(this.resPath, 'lib')
     if (fs.existsSync(path.join(builtRoot, 'render-templates'))) return builtRoot
     return path.join(this.resPath, 'src')
   }
 
-  private getTemplateRoot() {
-    return path.join(this.getResourceRoot(), 'render-templates')
+  private getTemplateCandidateRoots() {
+    const roots = [
+      path.join(this.resPath, 'lib'),
+      path.join(this.resPath, 'src'),
+    ]
+    return Array.from(new Set(roots))
   }
 
-  private getTemplatePath(templateName: string) {
-    const directHtmlPath = path.join(this.getTemplateRoot(), `${templateName}.html`)
-    if (fs.existsSync(directHtmlPath)) return directHtmlPath
-    return path.join(this.getTemplateRoot(), templateName, 'index.html')
+  private resolveTemplatePath(templateName: string) {
+    for (const root of this.getTemplateCandidateRoots()) {
+      const templateRoot = path.join(root, 'render-templates')
+      const directHtmlPath = path.join(templateRoot, `${templateName}.html`)
+      if (fs.existsSync(directHtmlPath)) {
+        return { templatePath: directHtmlPath, resourceRoot: root }
+      }
+      const indexHtmlPath = path.join(templateRoot, templateName, 'index.html')
+      if (fs.existsSync(indexHtmlPath)) {
+        return { templatePath: indexHtmlPath, resourceRoot: root }
+      }
+    }
+    return null
   }
 
   private getStylePath(templateName: string) {
-    return path.join(this.getTemplateRoot(), templateName, 'style.css')
+    const resolved = this.resolveTemplatePath(templateName)
+    if (!resolved) return ''
+    return path.join(resolved.resourceRoot, 'render-templates', templateName, 'style.css')
   }
 
   async renderHtml(ctx: Context, templateName: string, data: any): Promise<Buffer | null> {
     try {
-      const templatePath = this.getTemplatePath(templateName)
-      if (!fs.existsSync(templatePath)) {
-        logger.error(`template file missing: ${templatePath}`)
+      const resolvedTemplate = this.resolveTemplatePath(templateName)
+      if (!resolvedTemplate) {
+        const checked = this.getTemplateCandidateRoots().map(root => path.join(root, 'render-templates', templateName))
+        logger.error(`template file missing: ${checked.join(' | ')}`)
         return null
       }
 
+      const { templatePath, resourceRoot } = resolvedTemplate
       const templateContent = fs.readFileSync(templatePath, 'utf-8')
       const normalizedTemplateContent = normalizeTemplateResourcePaths(templateContent)
-      const resPathUrl = toDirectoryFileUrl(this.getResourceRoot())
+      const resPathUrl = toDirectoryFileUrl(resourceRoot)
       const renderData = { ...data, _res_path: resPathUrl, pluResPath: resPathUrl }
       const html = template.render(normalizedTemplateContent, renderData)
 
@@ -134,6 +151,8 @@ export class Renderer {
                     '.student-page',
                     '.merchant-page',
                     '.home-page',
+                    '.pet-panel-page',
+                    '.pet-detail-page',
                 ]
 
         let target: any = null

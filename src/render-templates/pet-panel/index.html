@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1240, initial-scale=1">
+  <link rel="stylesheet" href="{{_res_path}}render/pet-panel/style.css">
+  <title>{{title}}</title>
+</head>
+<body>
+  <div class="pet-panel-page">
+    <header class="panel-header">
+      <div>
+        <h1>{{title}}</h1>
+        <p class="subtitle">{{subtitle}}</p>
+      </div>
+      <div class="meta-box">
+        <div class="meta-label">最近刷新</div>
+        <div class="meta-value">{{updatedAtText}}</div>
+      </div>
+    </header>
+
+    <section class="pet-grid {{if !cards || cards.length === 0}}is-empty{{/if}}">
+      {{if cards && cards.length > 0}}
+      {{each cards card}}
+      <article class="pet-card">
+        <div class="card-top">
+          <div class="type-icons">
+            {{if card.elementIcons && card.elementIcons.length > 0}}
+            {{each card.elementIcons icon}}
+            <img class="type-icon" src="{{icon}}" alt="" onerror="this.style.display='none'">
+            {{/each}}
+            {{/if}}
+          </div>
+          <span class="mutation">{{card.mutationLabel}}</span>
+        </div>
+        <div class="pet-avatar-wrap">
+          <img class="pet-avatar" src="{{card.iconUrl}}" alt="{{card.name}}" onerror="this.style.display='none'">
+        </div>
+        <div class="pet-name">{{card.name}}</div>
+        <div class="pet-meta">GID {{card.gid}} · Lv.{{card.level}}</div>
+        <div class="pet-meta light">{{card.bloodlineLabel}}</div>
+        <div class="type-row">
+          {{if card.elementLabels && card.elementLabels.length > 0}}
+          {{each card.elementLabels label}}
+          <span class="type-tag">{{label}}</span>
+          {{/each}}
+          {{else}}
+          <span class="type-tag">未知属性</span>
+          {{/if}}
+        </div>
+      </article>
+      {{/each}}
+      {{else}}
+      <div class="empty-text">当前没有可展示的精灵数据，请先执行刷新面板。</div>
+      {{/if}}
+    </section>
+
+    <footer class="footer-hint">{{commandHint}}</footer>
+  </div>
+</body>
+</html>

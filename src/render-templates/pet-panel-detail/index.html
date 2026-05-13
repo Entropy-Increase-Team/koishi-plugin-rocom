@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1280, initial-scale=1">
+  <link rel="stylesheet" href="{{_res_path}}render/pet-panel-detail/style.css">
+  <title>{{title}}</title>
+</head>
+<body>
+  <div class="pet-detail-page">
+    <header class="detail-header">
+      <div>
+        <h1>{{pet.name}}</h1>
+        <p class="subtitle">{{subtitle}}</p>
+      </div>
+      <div class="meta-right">
+        <span class="meta-pill">{{pet.mutationLabel}}</span>
+        <span class="meta-pill">{{pet.bloodlineLabel}}</span>
+      </div>
+    </header>
+
+    <section class="top-grid">
+      <article class="left-card">
+        <div class="image-box">
+          <img src="{{pet.imageUrl}}" alt="{{pet.name}}" onerror="this.style.display='none'">
+        </div>
+        <div class="id-row">GID {{pet.gid}} · PetID {{pet.petId}}</div>
+        <div class="small-row">Lv.{{pet.level}} · {{pet.gender}} · 能量 {{pet.energy}}</div>
+        <div class="type-row">
+          {{if pet.elementLabels && pet.elementLabels.length > 0}}
+          {{each pet.elementLabels label}}
+          <span class="type-tag">{{label}}</span>
+          {{/each}}
+          {{else}}
+          <span class="type-tag">未知属性</span>
+          {{/if}}
+        </div>
+      </article>
+
+      <article class="right-card">
+        <h2>属性面板</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>属性</th>
+              <th>数值</th>
+              <th>个体</th>
+              <th>成长</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{each pet.attributes item}}
+            <tr>
+              <td>{{item.label}}</td>
+              <td>{{item.value}}</td>
+              <td>{{item.talent}}</td>
+              <td>{{item.effortAdd}}</td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </article>
+    </section>
+
+    <section class="feature-card">
+      <h2>特性</h2>
+      <div class="feature-name">{{pet.feature.name}}</div>
+      <p class="feature-desc">{{pet.feature.desc || '当前接口未返回特性描述。'}}</p>
+    </section>
+
+    <section class="skills-card">
+      <div class="skills-title-row">
+        <h2>已装备技能</h2>
+        <span>{{pet.equipSkills.length}} 项</span>
+      </div>
+      {{if hasEquipSkills}}
+      <div class="skills-grid">
+        {{each pet.equipSkills skill}}
+        <article class="skill-item">
+          <img class="skill-icon" src="{{skill.iconUrl}}" alt="{{skill.name}}" onerror="this.style.display='none'">
+          <div class="skill-main">
+            <div class="skill-name">{{skill.name}}</div>
+            <div class="skill-meta">{{skill.typeLabel}} · 能耗 {{skill.cost}} · 威力 {{skill.power}}</div>
+            <div class="skill-desc">{{skill.description || ''}}</div>
+          </div>
+        </article>
+        {{/each}}
+      </div>
+      {{else}}
+      <div class="empty-skill">{{emptySkillHint}}</div>
+      {{/if}}
+    </section>
+
+    <section class="skills-card">
+      <div class="skills-title-row">
+        <h2>全部技能</h2>
+        <span>{{pet.skills.length}} 项</span>
+      </div>
+      {{if hasSkills}}
+      <div class="skills-grid">
+        {{each pet.skills skill}}
+        <article class="skill-item">
+          <img class="skill-icon" src="{{skill.iconUrl}}" alt="{{skill.name}}" onerror="this.style.display='none'">
+          <div class="skill-main">
+            <div class="skill-name">{{skill.name}}</div>
+            <div class="skill-meta">{{skill.typeLabel}} · 能耗 {{skill.cost}} · 威力 {{skill.power}}</div>
+            <div class="skill-desc">{{skill.description || ''}}</div>
+          </div>
+        </article>
+        {{/each}}
+      </div>
+      {{else}}
+      <div class="empty-skill">{{emptySkillHint}}</div>
+      {{/if}}
+    </section>
+
+    <footer class="footer-row">
+      <span>最近刷新：{{updatedAtText}}</span>
+      <span>{{commandHint}}</span>
+    </footer>
+  </div>
+</body>
+</html>

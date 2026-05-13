@@ -1,0 +1,258 @@
+@font-face {
+  font-family: "pet-detail-font";
+  src: url("../../ttf/HYWenHei-85W-1.ttf") format("truetype");
+  font-display: swap;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 24px;
+  display: inline-block;
+  background: #f4ecdf;
+  color: #2f2318;
+  font-family: "pet-detail-font", "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+
+.pet-detail-page {
+  width: 1280px;
+  border-radius: 24px;
+  padding: 26px;
+  background:
+    radial-gradient(circle at 9% 6%, rgba(255, 216, 136, 0.44), transparent 34%),
+    radial-gradient(circle at 94% 10%, rgba(255, 170, 115, 0.28), transparent 32%),
+    url("../../img/ercode-bg.D1ccSQKH.png") top center / 100% auto no-repeat;
+  border: 1px solid rgba(120, 84, 43, 0.16);
+  box-shadow: 0 20px 52px rgba(76, 55, 32, 0.16);
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 46px;
+  line-height: 1.05;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+  font-size: 20px;
+  color: #7a664c;
+}
+
+.meta-right {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meta-pill {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 198, 95, 0.24);
+  color: #8e5f1f;
+  font-size: 15px;
+}
+
+.top-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 14px;
+}
+
+.left-card,
+.right-card,
+.feature-card,
+.skills-card {
+  border-radius: 18px;
+  border: 1px solid rgba(120, 84, 43, 0.14);
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: 0 10px 20px rgba(96, 66, 30, 0.08);
+}
+
+.left-card {
+  padding: 14px;
+}
+
+.image-box {
+  height: 220px;
+  border-radius: 14px;
+  background: rgba(255, 242, 213, 0.66);
+  border: 1px dashed rgba(120, 84, 43, 0.22);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.image-box img {
+  width: 200px;
+  height: 200px;
+  object-fit: contain;
+}
+
+.id-row,
+.small-row {
+  margin-top: 10px;
+  font-size: 17px;
+  color: #5f4b36;
+}
+
+.type-row {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.type-tag {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 198, 95, 0.22);
+  color: #805f36;
+  font-size: 14px;
+}
+
+.right-card {
+  padding: 14px;
+}
+
+h2 {
+  margin: 0;
+  font-size: 30px;
+  color: #2f2318;
+}
+
+table {
+  margin-top: 10px;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid rgba(120, 84, 43, 0.16);
+  text-align: left;
+  padding: 8px 6px;
+  font-size: 16px;
+}
+
+th {
+  color: #6f5940;
+  font-weight: 700;
+}
+
+.feature-card {
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.feature-name {
+  margin-top: 8px;
+  font-size: 24px;
+  color: #3f2e1f;
+}
+
+.feature-desc {
+  margin: 8px 0 0;
+  color: #6f5a42;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.skills-card {
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.skills-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.skills-title-row span {
+  color: #7f6a52;
+  font-size: 16px;
+}
+
+.skills-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.skill-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(120, 84, 43, 0.12);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.skill-icon {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: rgba(255, 243, 214, 0.8);
+  border: 1px solid rgba(120, 84, 43, 0.14);
+}
+
+.skill-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.skill-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 20px;
+  color: #3a2a1b;
+}
+
+.skill-meta {
+  margin-top: 2px;
+  font-size: 14px;
+  color: #786247;
+}
+
+.skill-desc {
+  margin-top: 4px;
+  font-size: 14px;
+  line-height: 1.35;
+  color: #7b6954;
+}
+
+.empty-skill {
+  margin-top: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px dashed rgba(120, 84, 43, 0.24);
+  background: rgba(255, 255, 255, 0.44);
+  color: #7f6d57;
+  font-size: 18px;
+}
+
+.footer-row {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(120, 84, 43, 0.14);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #7d6a53;
+  font-size: 16px;
+}
