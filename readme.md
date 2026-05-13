@@ -1,5 +1,5 @@
 # koishi-plugin-rocom
-<img width="400" height="400" alt="image" src="https://github.com/user-attachments/assets/cdd7655e-08db-4db2-becc-5a2ace6c744b" />
+<img width="200" height="200" alt="image" src="https://github.com/user-attachments/assets/cdd7655e-08db-4db2-becc-5a2ace6c744b" />
 
 注意，本项目仍处于开发调试期，可能会有未知BUG的产生。  
 > APIKey  
