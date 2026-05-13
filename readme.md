@@ -127,4 +127,4 @@ Koishi 版洛克王国数据查询插件。插件基于 WeGame / 后端接口提
 
 ## 许可证
 
-本项目使用 MIT License。
+本项目使用 AGPL-3.0 License。
