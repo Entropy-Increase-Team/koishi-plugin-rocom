@@ -1408,7 +1408,6 @@ export function register(deps: PluginDeps) {
       if (!fwToken) return notLoggedInHint()
 
       const userIdentifier = session!.userId!
-      await session!.send('正在获取洛克王国数据...')
 
       const [roleRes, evalRes, sumRes, collRes, boRes, blRes] = await Promise.all([
         client.getRole(ctx, fwToken, undefined, userIdentifier),
@@ -1872,7 +1871,6 @@ export function register(deps: PluginDeps) {
       if (!targetUid) return '请提供 UID，或先绑定账号后再使用 洛克.刷新面板。'
       if (!/^\d+$/.test(targetUid)) return '请输入正确的 UID 格式。'
 
-      await session?.send?.(`正在刷新 UID ${targetUid} 的精灵面板，请稍候...`)
       const record = await refreshPanelPets(deps, targetUid, session?.userId || '')
       if (!record) return panelRefreshErrorHint(client)
 

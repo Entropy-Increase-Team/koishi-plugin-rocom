@@ -1,4 +1,4 @@
-import { h } from 'koishi'
+import { h, Logger } from 'koishi'
 import { PluginDeps } from '../types'
 import {
   getRoleToken,
@@ -7,6 +7,20 @@ import {
 } from '../role-token'
 import { Binding } from '../user'
 import { sendImageWithFallback } from '../send-image'
+
+const logger = new Logger('rocom-account')
+
+async function recallMessages(session: any, messageIds: string[]) {
+  if (!session?.bot?.deleteMessage || !session.channelId) return
+  for (const id of messageIds) {
+    if (!id) continue
+    try {
+      await session.bot.deleteMessage(session.channelId, id)
+    } catch (err) {
+      logger.warn(`撤回消息 ${id} 失败：${err}`)
+    }
+  }
+}
 
 export async function getPrimaryToken(deps: PluginDeps, userId: string): Promise<string> {
   const token = await getRoleToken(deps.ctx, userId)
@@ -39,9 +53,22 @@ export async function saveBindingWithRoleInfo(
   fwToken: string,
   loginType: string,
   userId: string,
+  preMessageIds: string[] = [],
 ) {
   const { ctx, client, userMgr } = deps
-  await session.send('登录成功，正在调用绑定接口...')
+  const intermediateMessageIds: string[] = [...preMessageIds]
+  const sendIntermediate = async (content: any) => {
+    const result = await session.send(content)
+    if (Array.isArray(result)) {
+      for (const id of result) {
+        if (id) intermediateMessageIds.push(String(id))
+      }
+    } else if (result) {
+      intermediateMessageIds.push(String(result))
+    }
+  }
+
+  await sendIntermediate('登录成功，正在调用绑定接口...')
 
   const bindRes = await client.createBinding(ctx, fwToken, userId)
   const bindingId = String(bindRes?.binding?.id || fwToken || '').trim()
@@ -50,7 +77,7 @@ export async function saveBindingWithRoleInfo(
     return
   }
 
-  await session.send('绑定成功，正在获取角色信息...')
+  await sendIntermediate('绑定成功，正在获取角色信息...')
   const roleRes = await client.getRole(ctx, fwToken, undefined, userId)
   if (!roleRes?.role) {
     await session.send('绑定成功，但获取角色信息失败，请尝试重新登录。')
@@ -76,6 +103,7 @@ export async function saveBindingWithRoleInfo(
     loginType,
   })
 
+  await recallMessages(session, intermediateMessageIds)
   await session.send(`绑定成功！当前账号：${binding.nickname} (ID: ${binding.role_id})`)
 }
 
@@ -92,11 +120,14 @@ export function register(deps: PluginDeps) {
       const fwToken = qrData.frameworkToken
       const qrB64 = qrData.qr_image
       const imgData = qrB64.includes(',') ? qrB64.split(',')[1] : qrB64
-      await session!.send(h('message', {},
+      const qrSendResult = await session!.send(h('message', {},
         h.at(userId),
         h.text('\n请使用 QQ 扫描二维码登录（有效时间 2 分钟）\n注意需要双设备扫码。\n'),
         h.image(`data:image/png;base64,${imgData}`),
       ))
+      const qrMessageIds: string[] = Array.isArray(qrSendResult)
+        ? qrSendResult.filter(Boolean).map(String)
+        : qrSendResult ? [String(qrSendResult)] : []
 
       const startTime = Date.now()
       while (Date.now() - startTime < 115000) {
@@ -104,7 +135,7 @@ export function register(deps: PluginDeps) {
         const status = await client.qqQrStatus(ctx, fwToken, userId)
         if (!status) continue
         if (status.status === 'done') {
-          await saveBindingWithRoleInfo(deps, session, fwToken, 'qq', userId)
+          await saveBindingWithRoleInfo(deps, session, fwToken, 'qq', userId, qrMessageIds)
           return
         }
         if (['expired', 'failed', 'canceled'].includes(status.status)) break
@@ -121,7 +152,10 @@ export function register(deps: PluginDeps) {
 
       const fwToken = qrData.frameworkToken
       const qrUrl = qrData.qr_image
-      await session!.send(`请使用微信打开以下链接扫码登录（有效时间 2 分钟）\n注意需要双设备扫码。\n${qrUrl}`)
+      const qrSendResult = await session!.send(`请使用微信打开以下链接扫码登录（有效时间 2 分钟）\n注意需要双设备扫码。\n${qrUrl}`)
+      const qrMessageIds: string[] = Array.isArray(qrSendResult)
+        ? qrSendResult.filter(Boolean).map(String)
+        : qrSendResult ? [String(qrSendResult)] : []
 
       const startTime = Date.now()
       while (Date.now() - startTime < 115000) {
@@ -129,7 +163,7 @@ export function register(deps: PluginDeps) {
         const status = await client.wechatQrStatus(ctx, fwToken, userId)
         if (!status) continue
         if (status.status === 'done') {
-          await saveBindingWithRoleInfo(deps, session, fwToken, 'wechat', userId)
+          await saveBindingWithRoleInfo(deps, session, fwToken, 'wechat', userId, qrMessageIds)
           return
         }
         if (['expired', 'failed'].includes(status.status)) break
