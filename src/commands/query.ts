@@ -1134,12 +1134,6 @@ function buildPlayerSearchRenderData(payload: any, uid: string) {
       ['舒适度', playerField(parsed, 'home_comfort_level')],
       ['访客数量', playerField(parsed, 'visitor_num')],
     ]),
-    pack('名片信息', [
-      ['名片皮肤', playerField(parsed, 'card_skin_selected')],
-      ['名片头像', playerField(parsed, 'card_icon_selected')],
-      ['首标签', playerField(parsed, 'card_label_first_selected')],
-      ['尾标签', playerField(parsed, 'card_label_last_selected')],
-    ]),
   ].filter(Boolean)
   const summaryCards = [
     { label: '等级', value: parsed.level },
@@ -1152,7 +1146,6 @@ function buildPlayerSearchRenderData(payload: any, uid: string) {
   const signature = parsed.signature && parsed.signature !== '未设置' ? parsed.signature : ''
   return {
     title: '洛克玩家',
-    subtitle: parsed.title,
     heroTitle: '玩家信息',
     heroValue: parsed.nickname,
     heroSubvalue: `UID ${parsed.uid}`,

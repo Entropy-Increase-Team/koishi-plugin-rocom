@@ -105,6 +105,10 @@ export class RocomClient {
       return true
     }
 
+    if (/请提供有效的认证凭证|有效的?认证凭证|valid\s+credentials?\s+required|X-API-Key|Authorization\s*:\s*Bearer|X-Anonymous-Token/i.test(message)) {
+      return true
+    }
+
     if (/HTTP\s*(401|403)/i.test(message)) {
       return true
     }
@@ -308,7 +312,11 @@ export class RocomClient {
       const status = Number(response?.status ?? response?.statusCode ?? 200)
       const body = response?.data !== undefined ? response.data : response
       if (body?.code !== undefined && body.code !== 0) {
-        this.setLastError(body.message || body.msg || '接口返回异常')
+        const rawMessage = body.message || body.msg || '接口返回异常'
+        const message = !acceptedStatuses.includes(status)
+          ? `HTTP ${status}: ${rawMessage}`
+          : rawMessage
+        this.setLastError(message)
         if (!options.silentFailureDetails) {
           this.logRequestFailureDetails(method, path, headers, options.params, options.json, body)
         }

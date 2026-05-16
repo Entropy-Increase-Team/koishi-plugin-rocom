@@ -2,59 +2,67 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=1200, initial-scale=1">
+  <meta name="viewport" content="width=1280, initial-scale=1">
   <link rel="stylesheet" href="{{_res_path}}render/player-search/style.css">
 </head>
 <body>
   <div class="player-search-page player-page">
-    <div class="page-header">
+    <div class="page-bg"></div>
+
+    <header class="page-header">
       <div class="page-title">{{title}}</div>
-      <div class="page-subtitle">{{subtitle}}</div>
-    </div>
+      <div class="page-title-ghost">ROCOM PLAYER</div>
+    </header>
 
-    <div class="hero-card">
-      <div class="hero-title">{{heroTitle}}</div>
-      <div class="hero-value">{{heroValue}}</div>
-      <div class="hero-subvalue">{{heroSubvalue}}</div>
-    </div>
+    <section class="profile-strip">
+      <div class="profile-main">
+        <div class="profile-name-row">
+          <span class="player-name">{{heroValue}}</span>
+          <span class="uid-pill">{{heroSubvalue}}</span>
+        </div>
+      </div>
+    </section>
 
-    <div class="summary-grid">
+    <section class="summary-strip">
       {{each summaryCards item}}
-      <div class="summary-card">
+      <div class="summary-item">
         <div class="summary-label">{{item.label}}</div>
         <div class="summary-value">{{item.value}}</div>
       </div>
       {{/each}}
-    </div>
+    </section>
 
     {{if showSignature}}
-    <div class="panel-card signature-panel">
-      <div class="section-title">个性签名</div>
-      <div class="signature-box">{{signature}}</div>
-    </div>
+    <section class="signature-strip">
+      <div class="signature-label">个性签名</div>
+      <div class="signature-text">{{signature}}</div>
+    </section>
     {{/if}}
 
-    <div class="section-grid">
+    <main class="content-grid">
       {{each sections section}}
-      <div class="panel-card info-panel">
-        <div class="section-title">{{section.title}}</div>
-        <div class="detail-card">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>{{section.title}}</h2>
+        </div>
+        <div class="detail-list">
           {{each section["items"] item}}
           <div class="detail-row">
-            <div class="detail-label">{{item.label}}</div>
-            <div class="detail-value">{{item.value}}</div>
+            <span class="detail-label">{{item.label}}</span>
+            <span class="detail-value">{{item.value}}</span>
           </div>
           {{/each}}
         </div>
-      </div>
+      </section>
       {{/each}}
-    </div>
+    </main>
 
-    {{if commandHint}}
-    <div class="command-hint">{{commandHint}}</div>
-    {{/if}}
-
-    <div class="footer">{{copyright}}</div>
+    <footer class="page-footer">
+      {{if commandHint}}
+      <div class="command-hint">用法：{{commandHint}}</div>
+      {{/if}}
+      <div class="copyright">{{copyright}}</div>
+    </footer>
   </div>
 </body>
 </html>
