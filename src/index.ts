@@ -1,6 +1,6 @@
 import { Context, Logger, Schema } from 'koishi'
 import fs from 'node:fs'
-import {} from 'koishi-plugin-puppeteer'
+import { } from 'koishi-plugin-puppeteer'
 import path from 'node:path'
 import { RocomClient } from './client'
 import { UserManager, MerchantSubscriptionManager, HomeSubscriptionManager } from './user'
@@ -130,7 +130,7 @@ export interface Config {
 export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
     apiBaseUrl: Schema.string().default('https://wegame.shallow.ink').description('API 基础地址'),
-    wegameApiKey: Schema.string().default('').description('WeGame API Key'),
+    wegameApiKey: Schema.string().default('').description('WeGame API Key（获取 key 查看 Github：https://github.com/Entropy-Increase-Team/koishi-plugin-rocom ）'),
     qqLoginDebugMode: Schema.boolean().default(false).description('QQ 扫码登录调试模式，仅调试时开启'),
     adminUserIds: Schema.array(String).default([]).description('管理员用户 ID 列表'),
     autoRefreshEnabled: Schema.boolean().default(false).description('启用自动刷新凭证'),
