@@ -55,4 +55,8 @@ export declare class RocomClient {
     getStudentPerks(ctx: Context, fwToken: string, area?: number, accountType?: number, userIdentifier?: string): Promise<any>;
     searchWikiPet(ctx: Context, query: string, limit?: number): Promise<any>;
     searchWikiSkill(ctx: Context, query: string, limit?: number): Promise<any>;
+    getWikiPetDetail(ctx: Context, options: {
+        id?: number;
+        name?: string;
+    }): Promise<any>;
 }

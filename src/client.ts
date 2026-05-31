@@ -606,10 +606,17 @@ export class RocomClient {
   }
 
   async searchWikiPet(ctx: Context, query: string, limit = 10) {
-    return this.get(ctx, '/api/v1/games/rocom/wiki/pet', this.wegameHeaders(), { q: query, limit })
+    return this.get(ctx, '/api/v1/games/rocom/pet/list', this.wegameHeaders(), { q: query, page_size: limit })
   }
 
   async searchWikiSkill(ctx: Context, query: string, limit = 10) {
-    return this.get(ctx, '/api/v1/games/rocom/wiki/skill', this.wegameHeaders(), { q: query, limit })
+    return this.get(ctx, '/api/v1/games/rocom/pet/skill-users', this.wegameHeaders(), { skill: query, limit })
+  }
+
+  async getWikiPetDetail(ctx: Context, options: { id?: number, name?: string }) {
+    const params: Record<string, any> = {}
+    if (options.id !== undefined) params.id = options.id
+    if (options.name) params.name = options.name
+    return this.get(ctx, '/api/v1/games/rocom/pet/detail', this.wegameHeaders(), params)
   }
 }
