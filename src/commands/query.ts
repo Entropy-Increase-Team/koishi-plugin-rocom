@@ -1957,21 +1957,6 @@ export function register(deps: PluginDeps) {
       await sendImage(deps, session, 'friendship', buildFriendshipRenderData(res, userIds), `【好友关系】${userIds}`)
     })
 
-  ctx.command('洛克').subcommand('.学生 [area:number] [accountType:number]', '查询学生认证状态与学生活动福利')
-    .alias('洛克学生')
-    .action(async ({ session }, area = 101, accountType = 0) => {
-      const fwToken = await getPrimaryToken(deps, session!.userId!)
-      if (!fwToken) return notLoggedInHint()
-      const userIdentifier = session!.userId!
-      const [stateRes, perksRes] = await Promise.all([
-        client.getStudentState(ctx, fwToken, accountType, userIdentifier),
-        client.getStudentPerks(ctx, fwToken, area, accountType, userIdentifier),
-      ])
-      if (!stateRes) return `学生认证状态查询失败：${client.getLastErrorBrief()}`
-      if (!perksRes) return `学生活动福利查询失败：${client.getLastErrorBrief()}`
-      await sendImage(deps, session, 'student', buildStudentRenderData(stateRes, perksRes, area, accountType), '【洛克学生】认证与福利信息')
-    })
-
   ctx.command('订阅家园菜园 [uid:string]', '订阅指定 UID 的家园菜园成熟提醒')
     .action(async ({ session }, uid = '') => subscribeHome(deps, session, uid, 'garden'))
 
