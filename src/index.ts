@@ -119,7 +119,9 @@ export interface Config {
   merchantSubscriptionEnabled: boolean
   merchantSubscriptionItems: string[]
   merchantPrivateSubscriptionEnabled: boolean
+  merchantCheckMode: 'interval' | 'times'
   merchantCheckInterval: number
+  merchantCheckTimes: string[]
   homeSubscriptionEnabled: boolean
   homeSubscriptionIntervalMinutes: number
   imageCompressionEnabled: boolean
@@ -144,7 +146,9 @@ export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
     merchantSubscriptionEnabled: Schema.boolean().default(true).description('启用远行商人订阅'),
     merchantSubscriptionItems: Schema.array(String).default(['国王球', '棱镜球', '炫彩精灵蛋']).description('默认订阅商品'),
-    merchantCheckInterval: Schema.number().default(300000).description('商人检查间隔，单位毫秒'),
+    merchantCheckMode: Schema.union(['interval', 'times'] as const).default('interval').description('商人检查模式：interval 定期轮询 / times 指定时间点'),
+    merchantCheckInterval: Schema.number().default(300000).description('商人检查间隔，单位毫秒（仅 interval 模式生效）'),
+    merchantCheckTimes: Schema.array(String).default([]).description('商人定时检查时间点（HH:MM 格式，如 08:00，仅 times 模式生效）'),
     merchantPrivateSubscriptionEnabled: Schema.boolean().default(true).description('允许个人私聊订阅远行商人推送'),
     homeSubscriptionEnabled: Schema.boolean().default(true).description('启用家园菜园和灵感订阅推送'),
     homeSubscriptionIntervalMinutes: Schema.number().default(5).description('家园订阅检查间隔，单位分钟'),

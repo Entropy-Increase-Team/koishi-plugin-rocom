@@ -294,8 +294,21 @@ export function register(deps: PluginDeps) {
     })
 
   if (config.merchantSubscriptionEnabled) {
-    ctx.setInterval(async () => {
-      await checkMerchantSubscriptions(deps)
-    }, config.merchantCheckInterval)
+    if (config.merchantCheckMode === 'times' && config.merchantCheckTimes.length > 0) {
+      let lastMerchantCheckKey = ''
+      ctx.setInterval(async () => {
+        const now = new Date()
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+        if (!config.merchantCheckTimes.includes(timeStr)) return
+        const checkKey = `${now.toDateString()}-${timeStr}`
+        if (checkKey === lastMerchantCheckKey) return
+        lastMerchantCheckKey = checkKey
+        await checkMerchantSubscriptions(deps)
+      }, 60000)
+    } else {
+      ctx.setInterval(async () => {
+        await checkMerchantSubscriptions(deps)
+      }, config.merchantCheckInterval)
+    }
   }
 }

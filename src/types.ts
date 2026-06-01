@@ -14,7 +14,9 @@ export interface PluginConfig {
   merchantSubscriptionEnabled: boolean
   merchantSubscriptionItems: string[]
   merchantPrivateSubscriptionEnabled: boolean
+  merchantCheckMode: 'interval' | 'times'
   merchantCheckInterval: number
+  merchantCheckTimes: string[]
   homeSubscriptionEnabled: boolean
   homeSubscriptionIntervalMinutes: number
   imageCompressionEnabled: boolean
