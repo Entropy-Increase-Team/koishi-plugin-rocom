@@ -9,11 +9,7 @@
 
 ---
 
-临时APIKey（任选其一）  
-sk-0c1476b201301170e6360453becb27f5
-
-sk-481029d0d4fc412ce9ebb391397c1e5c
-
+APIkey获取请访问：[洛克魔法书](https://rocom.shallow.ink/)
 ---
 
 </div>
