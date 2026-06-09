@@ -302,6 +302,45 @@ export class EggService {
     }
   }
 
+  private formatEggSearchCard(item: any) {
+    const eggGroups = Array.isArray(item?.egg_groups)
+      ? item.egg_groups
+        .map((group: any) => group?.official_name || group?.display_name || `蛋组${group?.group_id}`)
+        .filter(Boolean)
+      : []
+    const heightRange = Array.isArray(item?.height_range_m) ? item.height_range_m : []
+    const weightRange = Array.isArray(item?.weight_range_kg) ? item.weight_range_kg : []
+    const typeLabel = Array.isArray(item?.unit_type) && item.unit_type.length
+      ? item.unit_type.join(' / ')
+      : '未知'
+
+    return {
+      id: item?.id || '-',
+      name: item?.name || '未知精灵',
+      icon: item?.pet_icon_url || petIconUrl(item?.id),
+      image: item?.pet_img_url || petImageUrl(item?.id),
+      type_label: typeLabel,
+      egg_group_ids: Array.isArray(item?.egg_groups)
+        ? item.egg_groups.map((group: any) => Number(group?.group_id)).filter((value: number) => Number.isFinite(value))
+        : [],
+      egg_groups_label: eggGroups.length ? eggGroups.join(' / ') : '暂无蛋组数据',
+      height_min: num(heightRange[0]),
+      height_max: num(heightRange[1]),
+      height_label: fmtRange(num(heightRange[0]), num(heightRange[1]), 'm'),
+      weight_min: num(weightRange[0]),
+      weight_max: num(weightRange[1]),
+      weight_label: fmtRange(num(weightRange[0]), num(weightRange[1]), 'kg'),
+      probability: null,
+      match_count: null,
+      match_info_label: '',
+    }
+  }
+
+  private formatEggSearchTextLine(item: any) {
+    const card = this.formatEggSearchCard(item)
+    return `${card.name} (#${card.id}) — ${card.height_label} / ${card.weight_label} · ${card.egg_groups_label}`
+  }
+
   private mergeCardsByName(perfect: any[], ranged: any[]): [any[], any[]] {
     const perfectMap = new Map<string, any>()
     const rangedMap = new Map<string, any>()
@@ -459,6 +498,25 @@ export class EggService {
         const card = this.formatSizeApiCard(item)
         lines.push(`  ${i + 1}. ${card.name} (#${card.id}) — ${card.height_label} / ${card.weight_label}`)
       })
+    }
+    return lines.join('\n')
+  }
+
+  buildEggSearchText(heightMeters?: number, weight?: number, results?: any, heightDisplay?: string): string {
+    const cond: string[] = []
+    if (heightMeters != null) cond.push(`身高=${heightDisplay || `${formatNumber(heightMeters)}m`}`)
+    if (weight != null) cond.push(`体重=${weight}kg`)
+    const condStr = cond.join(' + ') || '当前条件'
+    const items = Array.isArray(results?.items) ? results.items : []
+    if (!items.length) return `❌ 未找到符合 ${condStr} 的精灵。`
+
+    const total = results?.total ?? items.length
+    const lines = [`✅ 符合 ${condStr} 的精灵（共 ${total} 只）：`]
+    items.slice(0, 10).forEach((item: any, index: number) => {
+      lines.push(`  ${index + 1}. ${this.formatEggSearchTextLine(item)}`)
+    })
+    if (results?.has_more) {
+      lines.push(`  ... 还有更多结果，可尝试更精确的尺寸或等待后续分页支持。`)
     }
     return lines.join('\n')
   }
@@ -653,6 +711,26 @@ export class EggService {
       total_count: perfect.length + ranged.length,
       has_results: !!(perfect.length || ranged.length),
       commandHint: '洛克查蛋 <精灵名> | 洛克查蛋 0.18m 1.5kg | 洛克查蛋 0.18',
+      copyright: 'Koishi & WeGame 洛克王国插件',
+    }
+  }
+
+  buildEggSearchData(heightMeters?: number, weight?: number, results?: any, heightDisplay?: string) {
+    const conditions: string[] = []
+    if (heightMeters != null) conditions.push(`身高 ${heightDisplay || `${formatNumber(heightMeters)} m`}`)
+    if (weight != null) conditions.push(`体重 ${weight} kg`)
+    const cards = (Array.isArray(results?.items) ? results.items : []).map((item: any) => this.formatEggSearchCard(item))
+    const pageNo = num(results?.page_no)
+    const totalPages = num(results?.total_pages)
+    const pageLabel = pageNo && totalPages ? ` · 第 ${pageNo}/${totalPages} 页` : ''
+
+    return {
+      query_label: `${conditions.join(' / ') || '孵蛋反查'}${pageLabel}`,
+      perfect_matches: cards,
+      range_matches: [],
+      total_count: results?.total ?? cards.length,
+      has_results: cards.length > 0,
+      commandHint: '洛克查蛋 <精灵名> | 洛克查蛋 0.18m 1.5kg | 洛克配种 <父体> <母体>',
       copyright: 'Koishi & WeGame 洛克王国插件',
     }
   }

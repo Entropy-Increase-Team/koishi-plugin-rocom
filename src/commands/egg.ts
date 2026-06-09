@@ -132,10 +132,19 @@ export function register(deps: PluginDeps) {
         let fallback = ''
 
         if (height != null && weight != null) {
-          const backendResults = await client.queryPetSize(ctx, heightMeters ?? height / 100, weight)
-          if (backendResults) {
-            data = eggService.buildSizeSearchDataFromApi(height, weight, backendResults, heightDisplay)
-            fallback = eggService.buildSizeSearchTextFromApi(height, weight, backendResults, heightDisplay)
+          const heightInMeters = heightMeters ?? height / 100
+          const eggSearchResults = await client.getEggSearch(ctx, heightInMeters, weight, 1, 20, session?.userId || '')
+          if (eggSearchResults) {
+            data = eggService.buildEggSearchData(heightInMeters, weight, eggSearchResults, heightDisplay)
+            fallback = eggService.buildEggSearchText(heightInMeters, weight, eggSearchResults, heightDisplay)
+          }
+
+          if (!data) {
+            const backendResults = await client.queryPetSize(ctx, heightInMeters, weight, false, session?.userId || '')
+            if (backendResults) {
+              data = eggService.buildSizeSearchDataFromApi(height, weight, backendResults, heightDisplay)
+              fallback = eggService.buildSizeSearchTextFromApi(height, weight, backendResults, heightDisplay)
+            }
           }
         }
 

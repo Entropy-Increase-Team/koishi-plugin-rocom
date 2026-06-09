@@ -13,7 +13,9 @@ export interface Config {
     merchantSubscriptionEnabled: boolean;
     merchantSubscriptionItems: string[];
     merchantPrivateSubscriptionEnabled: boolean;
+    merchantCheckMode: 'interval' | 'times';
     merchantCheckInterval: number;
+    merchantCheckTimes: string[];
     homeSubscriptionEnabled: boolean;
     homeSubscriptionIntervalMinutes: number;
     imageCompressionEnabled: boolean;

@@ -27,6 +27,8 @@ export declare class EggService {
     private rangeMatchScore;
     private formatPetCard;
     private formatSizeApiCard;
+    private formatEggSearchCard;
+    private formatEggSearchTextLine;
     private mergeCardsByName;
     private mergeSizeCard;
     private minValue;
@@ -47,6 +49,7 @@ export declare class EggService {
         range: any[];
     }, heightDisplay?: string): string;
     buildSizeSearchTextFromApi(height?: number, weight?: number, results?: any, heightDisplay?: string): string;
+    buildEggSearchText(heightMeters?: number, weight?: number, results?: any, heightDisplay?: string): string;
     buildSearchText(pet: any): string;
     buildCandidatesText(keyword: string, candidates: any[]): string;
     buildWantPetText(pet: any): string;
@@ -221,6 +224,15 @@ export declare class EggService {
         perfect_matches: any[];
         range_matches: any[];
         total_count: number;
+        has_results: boolean;
+        commandHint: string;
+        copyright: string;
+    };
+    buildEggSearchData(heightMeters?: number, weight?: number, results?: any, heightDisplay?: string): {
+        query_label: string;
+        perfect_matches: any;
+        range_matches: any[];
+        total_count: any;
         has_results: boolean;
         commandHint: string;
         copyright: string;

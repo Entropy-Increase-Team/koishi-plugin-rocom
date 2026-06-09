@@ -20,6 +20,7 @@ export declare class RocomClient {
     private logRequestFailureDetails;
     private get;
     private post;
+    private scopedParams;
     private delete;
     private requestWithStatus;
     private requestIngameWithFallback;
@@ -32,6 +33,8 @@ export declare class RocomClient {
     createBinding(ctx: Context, fwToken: string, userIdentifier: string): Promise<any>;
     refreshBinding(ctx: Context, bindingId: string, userIdentifier: string): Promise<any>;
     deleteBinding(ctx: Context, bindingId: string, userIdentifier: string): Promise<boolean>;
+    getAccounts(ctx: Context, userIdentifier?: string, accountType?: number): Promise<any>;
+    bindUid(ctx: Context, uid: string, userIdentifier?: string): Promise<any>;
     getRole(ctx: Context, fwToken: string, accountType?: number, userIdentifier?: string): Promise<any>;
     getEvaluation(ctx: Context, fwToken: string, userIdentifier?: string): Promise<any>;
     getLastError(defaultMessage?: string): string;
@@ -47,7 +50,33 @@ export declare class RocomClient {
     getLineupList(ctx: Context, fwToken: string, pageNo?: number, category?: string, userIdentifier?: string): Promise<any>;
     getExchangePosters(ctx: Context, fwToken: string, pageNo?: number, userIdentifier?: string): Promise<any>;
     getMerchantInfo(ctx: Context, refresh?: boolean): Promise<any>;
-    queryPetSize(ctx: Context, diameter: number, weight: number): Promise<any>;
+    queryPetSize(ctx: Context, diameter: number, weight: number, sameRideEgg?: boolean, userIdentifier?: string): Promise<any>;
+    getActivitiesInfo(ctx: Context, refresh?: boolean, userIdentifier?: string): Promise<any>;
+    syncConfig(ctx: Context, userIdentifier?: string): Promise<any>;
+    getAnnouncementList(ctx: Context, params?: {
+        category_id?: number | string;
+        page?: number;
+        limit?: number;
+        order?: string;
+    }, userIdentifier?: string): Promise<any>;
+    getLatestAnnouncement(ctx: Context, params?: {
+        category_id?: number | string;
+        order?: string;
+    }, userIdentifier?: string): Promise<any>;
+    getAnnouncementDetail(ctx: Context, threadId: number | string, userIdentifier?: string): Promise<any>;
+    getEggSearch(ctx: Context, height: number, weight: number, pageNo?: number, pageSize?: number, userIdentifier?: string): Promise<any>;
+    getEggGroups(ctx: Context, userIdentifier?: string): Promise<any>;
+    getEggGroupPets(ctx: Context, groupIds: string | number[], matchMode?: 'any' | 'all', pageNo?: number, pageSize?: number, userIdentifier?: string): Promise<any>;
+    getEggPetGroups(ctx: Context, query: string, limit?: number, userIdentifier?: string): Promise<any>;
+    getEggExchanges(ctx: Context, params?: Record<string, any>, userIdentifier?: string): Promise<any>;
+    postEggExchange(ctx: Context, data: Record<string, any>, userIdentifier?: string): Promise<any>;
+    getMyEggExchanges(ctx: Context, params?: Record<string, any>, userIdentifier?: string): Promise<any>;
+    getEggExchangeReviewStatus(ctx: Context, postId: string | number, userIdentifier?: string): Promise<any>;
+    closeEggExchange(ctx: Context, postId: string | number, closeReason?: string, userIdentifier?: string): Promise<any>;
+    createEggExchangeSubscription(ctx: Context, filters: Record<string, any>, userIdentifier?: string): Promise<any>;
+    getEggExchangeSubscriptions(ctx: Context, userIdentifier?: string): Promise<any>;
+    deleteEggExchangeSubscription(ctx: Context, subscriptionId: string | number, userIdentifier?: string): Promise<any>;
+    getEggExchangeEvents(ctx: Context, subscriptionId: string | number, afterEventId?: string, limit?: number, userIdentifier?: string): Promise<any>;
     ingameHomeInfo(ctx: Context, uid: string, waitMs?: number): Promise<any>;
     ingameMerchantInfo(ctx: Context, shopId: string | number): Promise<any>;
     getFriendship(ctx: Context, fwToken: string, userIds: string, userIdentifier?: string): Promise<any>;

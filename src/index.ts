@@ -17,6 +17,7 @@ import { register as registerQuery } from './commands/query'
 import { register as registerMerchant } from './commands/merchant'
 import { register as registerWiki } from './commands/wiki'
 import { register as registerEgg } from './commands/egg'
+import { register as registerTools } from './commands/tools'
 import { register as registerAdmin } from './commands/admin'
 import { sendImageWithFallback } from './send-image'
 
@@ -46,6 +47,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { cmd: '洛克.微信登录', desc: '微信扫码绑定账号' },
       { cmd: '洛克.导入', desc: '导入 WeGame 凭证' },
       { cmd: '洛克.绑定列表', desc: '查看已绑定账号' },
+      { cmd: '洛克.绑定UID', desc: '绑定 UID 为主账号' },
       { cmd: '洛克.切换', desc: '切换主账号' },
       { cmd: '洛克.解绑', desc: '删除绑定账号' },
       { cmd: '洛克.刷新', desc: '刷新当前凭证' },
@@ -63,6 +65,8 @@ const MENU_GROUPS: MenuGroup[] = [
       { cmd: '洛克.玩家', desc: '查询 ingame 玩家资料' },
       { cmd: '洛克.家园', desc: '查询家园菜园' },
       { cmd: '洛克.商店', desc: '查询 ingame 商店' },
+      { cmd: '洛克.日历', desc: '查看活动日历' },
+      { cmd: '洛克.公告', desc: '查看公告列表' },
       { cmd: '洛克.好友关系', desc: '查询好友关系' },
       { cmd: '洛克.学生', desc: '查询学生认证与福利' },
     ],
@@ -193,5 +197,6 @@ export function apply(ctx: Context, config: Config) {
   registerMerchant(deps)
   registerWiki(deps)
   registerEgg(deps)
+  registerTools(deps)
   registerAdmin(deps)
 }

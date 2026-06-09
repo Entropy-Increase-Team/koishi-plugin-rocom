@@ -43,6 +43,7 @@ function formatLoginType(loginType: string): string {
     qq: 'QQ',
     wechat: '微信',
     manual: '手动导入',
+    uid: 'UID 绑定',
   }
   return typeMap[loginType] || loginType || '未知'
 }
@@ -211,6 +212,53 @@ export function register(deps: PluginDeps) {
       })
       const png = await deps.renderer.renderHtml(ctx, 'bind-list', data)
       await sendImageWithFallback(session, png, fallbackLines.join('\n'), 'account:bind-list', deps.config)
+    })
+
+  ctx.command('洛克').subcommand('.绑定UID <uid:string>', '绑定洛克 UID')
+    .alias('洛克绑定UID')
+    .alias('绑定UID')
+    .action(async ({ session }, uid) => {
+      const userId = session!.userId!
+      const targetUid = String(uid || '').trim()
+      if (!/^\d{4,20}$/.test(targetUid)) return '用法：洛克.绑定UID <UID>，UID 必须为 4 到 20 位数字。'
+
+      const res = await client.bindUid(ctx, targetUid, userId)
+      if (!res) return `绑定 UID 失败：${client.getLastErrorBrief()}`
+
+      const bindingPayload = res?.binding || {}
+      const bindingId = String(bindingPayload?.id || bindingPayload?.binding_id || `uid:${targetUid}`).trim()
+      const frameworkToken = String(res?.frameworkToken || res?.framework_token || '').trim()
+      const binding: Binding = {
+        binding_id: bindingId,
+        login_type: 'uid',
+        role_id: targetUid,
+        nickname: `UID ${targetUid}`,
+        bind_time: Date.now(),
+        is_primary: true,
+      }
+
+      const existing = userMgr.getUserBindings(userId)
+        .filter(item => item.binding_id !== bindingId && item.role_id !== targetUid)
+        .map(item => ({ ...item, is_primary: false }))
+      userMgr.saveUserBindings(userId, [...existing, binding])
+
+      if (frameworkToken) {
+        await upsertRoleToken(ctx, {
+          userId,
+          fwt: frameworkToken,
+          bindingId,
+          roleId: targetUid,
+          loginType: 'uid',
+        })
+      }
+
+      const source = String(bindingPayload?.source || '').trim()
+      return [
+        'UID 绑定成功。',
+        `UID：${targetUid}`,
+        source ? `来源：${source}` : '',
+        frameworkToken ? '已生成凭证，后续 ingame 查询会优先使用该账号。' : '已保存为本地主账号，可用于默认 UID 查询。',
+      ].filter(Boolean).join('\n')
     })
 
   ctx.command('洛克').subcommand('.切换 <index:number>', '切换主账号')

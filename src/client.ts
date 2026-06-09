@@ -263,20 +263,26 @@ export class RocomClient {
     }
   }
 
-  private async delete(ctx: Context, path: string, headers: Record<string, string>) {
+  private scopedParams(params: Record<string, any> = {}, userIdentifier = ''): Record<string, any> {
+    const result = { ...params }
+    if (userIdentifier) result.user_identifier = this.sanitizeUid(userIdentifier)
+    return result
+  }
+
+  private async delete(ctx: Context, path: string, headers: Record<string, string>, params?: Record<string, any>) {
     try {
-      const resp: any = await ctx.http("DELETE", `${this.baseUrl}${path}`, { headers, timeout: this.timeout })
+      const resp: any = await ctx.http("DELETE", `${this.baseUrl}${path}`, { headers, params, timeout: this.timeout })
       if (resp?.code !== 0) {
         this.setLastError(resp?.message || '接口返回异常')
         logger.warn(path + ' error: ' + (resp?.message || 'unknown'))
-        this.logRequestFailureDetails('DELETE', path, headers, undefined, undefined, resp)
+        this.logRequestFailureDetails('DELETE', path, headers, params, undefined, resp)
         return null
       }
       return resp?.data ?? {}
     } catch (e) {
       const message = this.formatHttpError(e)
       this.setLastError(message)
-      this.logRequestFailureDetails('DELETE', path, headers, undefined, undefined, e)
+      this.logRequestFailureDetails('DELETE', path, headers, params, undefined, e)
       const err = e as any
       if (err?.response) {
         logger.warn('DELETE ' + path + ' failed: ' + message)
@@ -430,6 +436,28 @@ export class RocomClient {
     return res !== null
   }
 
+  async getAccounts(ctx: Context, userIdentifier = '', accountType?: number) {
+    const params: any = this.scopedParams({}, userIdentifier)
+    if (accountType !== undefined) params.account_type = accountType
+    return this.get(ctx, '/api/v1/games/rocom/accounts', this.wegameHeaders('', userIdentifier, 'bot', 'koishi'), params)
+  }
+
+  async bindUid(ctx: Context, uid: string, userIdentifier = '') {
+    const sanitizedUid = this.sanitizeUid(uid)
+    if (!/^\d+$/.test(sanitizedUid)) {
+      this.setLastError('UID 必须为纯数字')
+      return null
+    }
+    const params = this.scopedParams({ client_type: 'bot', client_id: 'koishi' }, userIdentifier)
+    return this.post(
+      ctx,
+      '/api/v1/games/rocom/uid/bind',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      { uid: sanitizedUid },
+      params,
+    )
+  }
+
   // 洛克王国游戏数据接口
   async getRole(ctx: Context, fwToken: string, accountType?: number, userIdentifier = '') {
     const params: any = {}
@@ -540,8 +568,207 @@ export class RocomClient {
     return this.get(ctx, '/api/v1/games/rocom/merchant/info', this.wegameHeaders(), { refresh: refresh ? 'true' : 'false' })
   }
 
-  async queryPetSize(ctx: Context, diameter: number, weight: number) {
-    return this.get(ctx, '/api/v1/games/rocom/pet/size-query', this.wegameHeaders(), { diameter, weight })
+  async queryPetSize(ctx: Context, diameter: number, weight: number, sameRideEgg = false, userIdentifier = '') {
+    const params: any = this.scopedParams({ diameter, weight }, userIdentifier)
+    if (sameRideEgg) params.sameRideEgg = 1
+    return this.get(ctx, '/api/v1/games/rocom/pet/size-query', this.wegameHeaders('', userIdentifier, 'bot', 'koishi'), params)
+  }
+
+  async getActivitiesInfo(ctx: Context, refresh = false, userIdentifier = '') {
+    return this.get(
+      ctx,
+      '/api/v1/games/rocom/activities/info',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      this.scopedParams({ refresh: refresh ? 'true' : 'false' }, userIdentifier),
+    )
+  }
+
+  async syncConfig(ctx: Context, userIdentifier = '') {
+    return this.post(
+      ctx,
+      '/api/v1/games/rocom/config/sync',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      {},
+      this.scopedParams({}, userIdentifier),
+    )
+  }
+
+  async getAnnouncementList(
+    ctx: Context,
+    params: { category_id?: number | string, page?: number, limit?: number, order?: string } = {},
+    userIdentifier = '',
+  ) {
+    return this.get(
+      ctx,
+      '/api/v1/games/rocom/announcement/list',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      this.scopedParams(params, userIdentifier),
+    )
+  }
+
+  async getLatestAnnouncement(
+    ctx: Context,
+    params: { category_id?: number | string, order?: string } = {},
+    userIdentifier = '',
+  ) {
+    return this.get(
+      ctx,
+      '/api/v1/games/rocom/announcement/latest',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      this.scopedParams(params, userIdentifier),
+    )
+  }
+
+  async getAnnouncementDetail(ctx: Context, threadId: number | string, userIdentifier = '') {
+    return this.get(
+      ctx,
+      '/api/v1/games/rocom/announcement/detail',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      this.scopedParams({ thread_id: threadId }, userIdentifier),
+    )
+  }
+
+  async getEggSearch(
+    ctx: Context,
+    height: number,
+    weight: number,
+    pageNo = 1,
+    pageSize = 20,
+    userIdentifier = '',
+  ) {
+    return this.get(
+      ctx,
+      '/api/v1/games/rocom/egg/search',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      this.scopedParams({ height, weight, page_no: pageNo, page_size: pageSize }, userIdentifier),
+    )
+  }
+
+  async getEggGroups(ctx: Context, userIdentifier = '') {
+    return this.get(
+      ctx,
+      '/api/v1/games/rocom/egg/groups',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      this.scopedParams({}, userIdentifier),
+    )
+  }
+
+  async getEggGroupPets(
+    ctx: Context,
+    groupIds: string | number[],
+    matchMode: 'any' | 'all' = 'any',
+    pageNo = 1,
+    pageSize = 20,
+    userIdentifier = '',
+  ) {
+    const normalizedGroupIds = Array.isArray(groupIds) ? groupIds.join(',') : String(groupIds || '')
+    return this.get(
+      ctx,
+      '/api/v1/games/rocom/egg/group-pets',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      this.scopedParams({ group_ids: normalizedGroupIds, match_mode: matchMode, page_no: pageNo, page_size: pageSize }, userIdentifier),
+    )
+  }
+
+  async getEggPetGroups(ctx: Context, query: string, limit = 20, userIdentifier = '') {
+    return this.get(
+      ctx,
+      '/api/v1/games/rocom/egg/pet-groups',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      this.scopedParams({ q: query, limit }, userIdentifier),
+    )
+  }
+
+  async getEggExchanges(ctx: Context, params: Record<string, any> = {}, userIdentifier = '') {
+    return this.get(
+      ctx,
+      '/api/v1/games/rocom/community/egg-exchanges',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      this.scopedParams(params, userIdentifier),
+    )
+  }
+
+  async postEggExchange(ctx: Context, data: Record<string, any>, userIdentifier = '') {
+    return this.post(
+      ctx,
+      '/api/v1/games/rocom/community/egg-exchanges',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      data,
+      this.scopedParams({}, userIdentifier),
+    )
+  }
+
+  async getMyEggExchanges(ctx: Context, params: Record<string, any> = {}, userIdentifier = '') {
+    return this.get(
+      ctx,
+      '/api/v1/games/rocom/community/egg-exchanges/my',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      this.scopedParams(params, userIdentifier),
+    )
+  }
+
+  async getEggExchangeReviewStatus(ctx: Context, postId: string | number, userIdentifier = '') {
+    return this.get(
+      ctx,
+      `/api/v1/games/rocom/community/egg-exchanges/${encodeURIComponent(String(postId))}/review-status`,
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      this.scopedParams({}, userIdentifier),
+    )
+  }
+
+  async closeEggExchange(ctx: Context, postId: string | number, closeReason = 'cancel', userIdentifier = '') {
+    return this.post(
+      ctx,
+      `/api/v1/games/rocom/community/egg-exchanges/${encodeURIComponent(String(postId))}/close`,
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      { close_reason: closeReason },
+      this.scopedParams({}, userIdentifier),
+    )
+  }
+
+  async createEggExchangeSubscription(ctx: Context, filters: Record<string, any>, userIdentifier = '') {
+    return this.post(
+      ctx,
+      '/api/v1/games/rocom/community/egg-exchange-subscriptions',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      { filters },
+      this.scopedParams({}, userIdentifier),
+    )
+  }
+
+  async getEggExchangeSubscriptions(ctx: Context, userIdentifier = '') {
+    return this.get(
+      ctx,
+      '/api/v1/games/rocom/community/egg-exchange-subscriptions',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      this.scopedParams({}, userIdentifier),
+    )
+  }
+
+  async deleteEggExchangeSubscription(ctx: Context, subscriptionId: string | number, userIdentifier = '') {
+    return this.delete(
+      ctx,
+      `/api/v1/games/rocom/community/egg-exchange-subscriptions/${encodeURIComponent(String(subscriptionId))}`,
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      this.scopedParams({}, userIdentifier),
+    )
+  }
+
+  async getEggExchangeEvents(
+    ctx: Context,
+    subscriptionId: string | number,
+    afterEventId = '',
+    limit = 50,
+    userIdentifier = '',
+  ) {
+    const params: Record<string, any> = { subscription_id: subscriptionId, limit }
+    if (afterEventId) params.after_event_id = afterEventId
+    return this.get(
+      ctx,
+      '/api/v1/games/rocom/community/egg-exchange-events',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      this.scopedParams(params, userIdentifier),
+    )
   }
 
   async ingameHomeInfo(ctx: Context, uid: string, waitMs = 5000) {
