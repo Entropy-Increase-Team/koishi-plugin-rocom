@@ -1,4 +1,5 @@
 import { Context, h, Logger } from 'koishi'
+import { detectImageMime } from './send-image'
 
 const logger = new Logger('rocom-subscription-send')
 
@@ -68,7 +69,7 @@ export async function sendScheduledImageWithFallback(
     return sendScheduledMessage(ctx, target, `${prefix}${fallbackText}`)
   }
 
-  const imageSegment = h.image(image, 'image/png')
+  const imageSegment = h.image(image, detectImageMime(image))
   const content = mentionAll ? `${prefix}${imageSegment}` : imageSegment
   const sent = await sendScheduledMessage(ctx, target, content)
   if (sent) return true

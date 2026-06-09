@@ -4,6 +4,7 @@ import { PluginConfig } from './types'
 
 const logger = new Logger('rocom-send')
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff])
 
 function formatSessionContext(session: any): string {
   if (!session) return 'session=<null>'
@@ -43,6 +44,16 @@ function pngChunk(type: string, data: Buffer): Buffer {
 
 function isPng(buffer: Buffer): boolean {
   return buffer.length > PNG_SIGNATURE.length && buffer.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)
+}
+
+function isJpeg(buffer: Buffer): boolean {
+  return buffer.length > JPEG_SIGNATURE.length && buffer.subarray(0, JPEG_SIGNATURE.length).equals(JPEG_SIGNATURE)
+}
+
+export function detectImageMime(image: Buffer): string {
+  if (isPng(image)) return 'image/png'
+  if (isJpeg(image)) return 'image/jpeg'
+  return 'image/png'
 }
 
 export function compressPngImage(image: Buffer, config: Pick<PluginConfig, 'imageCompressionEnabled' | 'imageCompressionMinBytes' | 'imageCompressionLevel'>): Buffer {
@@ -118,7 +129,7 @@ export async function sendImageWithFallback(
   }
 
   try {
-    const result = await session.send(h.image(outputImage, 'image/png'))
+    const result = await session.send(h.image(outputImage, detectImageMime(outputImage)))
     if (!hasSendResult(result)) {
       logger.warn(`[${scene}] image send returned empty result | size=${outputImage.length}B | ${ctxInfo}`)
     }

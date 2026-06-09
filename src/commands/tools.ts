@@ -1,7 +1,10 @@
 import { Logger } from 'koishi'
 import { PluginDeps } from '../types'
+import { ActivitiesService } from '../activities-service'
+import { sendImageWithFallback } from '../send-image'
 
 const logger = new Logger('rocom-tools')
+const activitiesService = new ActivitiesService()
 
 function trimText(value: unknown): string {
   return String(value ?? '').trim()
@@ -45,38 +48,6 @@ function firstArray(payload: any, keys: string[]): any[] {
   }
   if (payload.data && typeof payload.data === 'object') return firstArray(payload.data, keys)
   return []
-}
-
-function rewardNames(item: any): string {
-  const values: string[] = []
-  for (const key of ['get_props', 'get_extra_props', 'get_pets', 'rewards']) {
-    const list = Array.isArray(item?.[key]) ? item[key] : []
-    for (const reward of list) {
-      const name = trimText(reward?.name || reward?.goods_name || reward?.pet_name || reward?.title || reward)
-      if (name) values.push(name)
-    }
-  }
-  return values.length ? values.slice(0, 6).join('、') : ''
-}
-
-function buildActivitiesText(data: any): string {
-  const activities = firstArray(data, ['otherActivities', 'other_activities', 'activityCalendar', 'calendar', 'activities', 'items', 'list'])
-  if (!activities.length) return '当前没有活动日历数据。'
-
-  const lines = ['洛克活动日历']
-  for (const [index, activity] of activities.slice(0, 12).entries()) {
-    const name = trimText(activity?.name || activity?.title) || '未命名活动'
-    const desc = trimText(activity?.description || activity?.desc)
-    const start = formatDate(activity?.start_time || activity?.startAt || activity?.start_at || activity?.start_date)
-    const end = formatDate(activity?.end_time || activity?.endAt || activity?.end_at || activity?.end_date)
-    const rewards = rewardNames(activity)
-    lines.push(`${index + 1}. ${name}`)
-    lines.push(`   时间：${start} - ${end}`)
-    if (desc) lines.push(`   说明：${desc.length > 60 ? `${desc.slice(0, 57)}...` : desc}`)
-    if (rewards) lines.push(`   奖励：${rewards}`)
-  }
-  if (activities.length > 12) lines.push(`还有 ${activities.length - 12} 个活动未展示。`)
-  return lines.join('\n')
 }
 
 function announcementId(item: any): string {
@@ -135,7 +106,7 @@ function buildAnnouncementDetailText(data: any): string {
 }
 
 export function register(deps: PluginDeps) {
-  const { ctx, client, config } = deps
+  const { ctx, client, config, renderer } = deps
 
   ctx.command('洛克').subcommand('.日历 [mode:string]', '查看洛克活动日历')
     .alias('洛克日历')
@@ -143,7 +114,11 @@ export function register(deps: PluginDeps) {
       const refresh = ['刷新', 'refresh', 'true', '1'].includes(String(mode || '').toLowerCase())
       const data = await client.getActivitiesInfo(ctx, refresh, session?.userId || '')
       if (!data) return `活动日历查询失败：${client.getLastErrorBrief()}`
-      return buildActivitiesText(data)
+      const fallback = activitiesService.buildFallbackText(data)
+      if (!session?.send) return fallback
+
+      const image = await renderer.renderHtml(ctx, 'activities', activitiesService.buildRenderData(data))
+      await sendImageWithFallback(session, image, fallback, 'activities:calendar', config)
     })
 
   ctx.command('洛克').subcommand('.公告 [page:number]', '查看洛克公告列表')

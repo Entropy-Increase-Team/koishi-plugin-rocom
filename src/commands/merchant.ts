@@ -180,7 +180,7 @@ async function checkMerchantSubscriptions(deps: PluginDeps) {
   const { products, roundInfo, data, fallback } = buildMerchantRenderPayload(res)
   const productNames = products.map((p: any) => p.name || '').filter(Boolean)
   const rendered = await renderer.renderHtml(ctx, 'yuanxing-shangren', data)
-  const renderedPng = rendered ? compressPngImage(rendered, config) : null
+  const renderedImage = rendered ? compressPngImage(rendered, config) : null
   const subs = merchantSubMgr.getAll()
   let matchedCount = 0
   let pushedCount = 0
@@ -215,7 +215,7 @@ async function checkMerchantSubscriptions(deps: PluginDeps) {
       channelId,
       guildId: sub.group_id || '',
       userId: sub.user_id || '',
-    }, renderedPng, fallbackText, !!sub.mention_all)
+    }, renderedImage, fallbackText, !!sub.mention_all)
     if (!sent) continue
 
     pushedCount++

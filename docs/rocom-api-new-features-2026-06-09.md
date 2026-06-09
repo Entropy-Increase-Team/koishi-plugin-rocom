@@ -110,7 +110,12 @@
 
 ## 活动、公告与配置同步
 
-新增文件：`src/commands/tools.ts`
+新增文件：
+
+- `src/commands/tools.ts`
+- `src/activities-service.ts`
+- `src/render-templates/activities/index.html`
+- `src/render-templates/activities/style.css`
 
 新增命令：
 
@@ -127,16 +132,17 @@
 
 实现内容：
 
-- 活动日历以文本方式展示活动名称、时间、说明、奖励摘要。
+- 活动日历迁移参考模块现成 UI，以甘特图图片展示活动名称、时间、状态、说明和奖励摘要。
+- `ActivitiesService` 负责抽取活动数据、计算北京时间范围、活动状态、轴线位置、泳道和文本回退内容。
+- 活动日历时间轴保留最多向后 50 天的上限；如果最后活动结束时间明显早于上限，会自动收紧到最后活动结束后 3 天，并至少保留未来 7 天视野，减少右侧空白。
+- `Renderer` 为 `activities` 模板增加 1600px 专用视口，并加入 `.activity-calendar-page` 截图目标。
+- `Renderer` 默认截图格式调整为 JPEG，质量为 82，用于降低默认发送图片体积。
+- `sendImageWithFallback()` 与订阅推送会按图片头自动识别 `image/jpeg` / `image/png` MIME；PNG 图片仍保留原有无损压缩逻辑。
+- 图片渲染或发送失败时，会自动回退为文本活动列表。
 - 公告列表以文本方式展示标题、发布时间、摘要和公告 ID。
 - 最新公告复用公告详情文本格式。
 - 公告详情会将 HTML 正文转换为纯文本，并列出最多 3 个图片资源链接。
 - 配置同步命令仅允许 `adminUserIds` 中的管理员调用，并要求后端 API Key 具备 `admin.access` 权限。
-
-说明：
-
-- 当前仓库没有参考模块中的 `activities` 图片模板，因此活动日历先采用文本输出。
-- 后续若迁移参考模板，可在 `Renderer` 中接入图片版活动日历。
 
 ## 插件入口与菜单
 
