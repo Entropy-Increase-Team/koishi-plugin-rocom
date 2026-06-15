@@ -271,13 +271,24 @@ function normalizeDurationSeconds(value: any): number {
 
 function formatHomeRemaining(targetTs: number, nowTs = Math.floor(Date.now() / 1000)): string {
   if (!targetTs) return '未开始'
+  if (nowTs >= targetTs) return '已完成'
   const remain = Math.max(0, targetTs - nowTs)
-  if (remain <= 0) return '已完成'
-  const hours = Math.floor(remain / 3600)
+  const days = Math.floor(remain / 86400)
+  const hours = Math.floor((remain % 86400) / 3600)
   const minutes = Math.floor((remain % 3600) / 60)
-  if (hours >= 24) return `${Math.floor(hours / 24)}天${hours % 24}小时`
+  const seconds = remain % 60
+  if (days > 0) return hours > 0 ? `${days}天${hours}小时` : `${days}天`
   if (hours > 0) return `${hours}小时${minutes}分钟`
-  return `${minutes}分钟`
+  if (minutes > 0) return `${minutes}分${seconds}秒`
+  return `${seconds}秒`
+}
+
+function formatEggRemaining(targetTs: number, nowTs = Math.floor(Date.now() / 1000)): string {
+  if (!targetTs || nowTs >= targetTs) return '0分钟'
+  const remain = Math.max(0, targetTs - nowTs)
+  const totalHours = Math.floor(remain / 3600)
+  const minutes = Math.floor((remain % 3600) / 60)
+  return `${totalHours}小时${minutes}分钟`
 }
 
 function homeInfoPayload(res: any): any {
@@ -945,30 +956,62 @@ function extractHomePet(raw: any, index: number, guard = false) {
   const display = raw.display_info && typeof raw.display_info === 'object' ? raw.display_info : {}
   const petId = homePet.pet_cfg_id || homePet.pet_id || homePet.pet_base_id || raw.pet_cfg_id || raw.pet_id || raw.id
   if (['', '0'].includes(String(petId || '0')) && !guard) return null
-  const feedInfo = homePet.feed_info && typeof homePet.feed_info === 'object' ? homePet.feed_info : {}
-  const beginTime = normalizeEpochSeconds(feedInfo.begin_time)
-  const timeCost = normalizeDurationSeconds(feedInfo.time_cost)
-  let readyAt = normalizeEpochSeconds(homePet.pet_rip_time || raw.pet_rip_time || raw.rip_time)
-  if (!readyAt && beginTime && timeCost) readyAt = beginTime + timeCost
+
   const nowTs = Math.floor(Date.now() / 1000)
-  const hasInspiration = Boolean(readyAt)
-  const inspireReady = hasInspiration && nowTs >= readyAt
-  const isGuard = guard || Boolean(raw.is_guard || raw.guard) || ['2', 'guard', '守卫'].includes(String(raw.status).toLowerCase())
-  const statusText = isGuard && !hasInspiration ? '守卫中' : inspireReady ? '灵感已完成' : hasInspiration ? '灵感收集中' : '未喂食'
-  const statusClass = isGuard && !hasInspiration ? 'guard' : inspireReady ? 'ready' : hasInspiration ? 'progress' : 'idle'
+
+  const hasEgg = Boolean(raw.have_egg)
+  const predictedEggTime = normalizeEpochSeconds(raw.predicted_egg_time)
+  const eggReady = hasEgg || (predictedEggTime > 0 && nowTs >= predictedEggTime)
+  const feedRound = Number(homePet.feed_round || raw.feed_round || 0) || 0
+  const gender = Number(display.gender || raw.gender || 0) || 0
+  const isMale = gender === 1
+
+  const status = homePet.status ?? raw.status
+  const isGuard = guard || Boolean(raw.is_guard || raw.guard) || ['2', 'guard', '守卫'].includes(String(status).toLowerCase())
+
+  const hasInspiration = feedRound > 0
+  const inspireReady = hasInspiration
+
+  const statusText = isGuard && !hasInspiration ? '守卫中'
+    : (inspireReady ? '可收取灵感'
+      : (hasInspiration ? '灵感收集中'
+        : '未喂食'))
+
+  const statusClass = isGuard && !hasInspiration ? 'guard'
+    : (eggReady ? 'ready'
+      : (inspireReady ? 'progress'
+        : (hasInspiration ? 'progress'
+          : 'idle')))
+
+  let note: string
+  if (isGuard && String(petId) === '0') {
+    note = '家园守卫位'
+  } else if (eggReady) {
+    note = '可收取'
+  } else if (predictedEggTime > 0) {
+    note = `${formatEggRemaining(predictedEggTime, nowTs)}后生蛋`
+  } else if (feedRound > 0) {
+    note = isMale ? '' : '等待生蛋'
+  } else if (isGuard) {
+    note = '家园守卫位'
+  } else {
+    note = '未喂食'
+  }
+
   return {
     id: String(petId || ''),
     pos: raw.pos || raw.position || index + 1,
     name: String(homePet.name || homePet.pet_name || raw.name || raw.pet_name || `精灵 ${petId || ''}`),
     level: display.level || raw.level || homePet.level || '--',
     iconUrl: homePetIcon(petId, raw.icon_url || raw.pet_img_url || raw.petIcon || ''),
-    badge: isGuard ? '守' : '',
+    badge: isGuard ? '守' : (hasEgg ? '蛋' : ''),
     isGuard,
     statusText,
     statusClass,
-    note: hasInspiration ? formatHomeRemaining(readyAt, nowTs) : (isGuard ? '家园守卫位' : '暂无灵感倒计时'),
-    inspireReady,
-    readyAt,
+    note,
+    inspireReady: eggReady,
+    readyAt: predictedEggTime || 0,
+    gender,
   }
 }
 
@@ -1085,6 +1128,16 @@ function buildHomeRenderData(deps: PluginDeps, res: any, uid: string) {
   guardSources.forEach((raw, index) => {
     const item = extractHomePet(raw, index, true)
     if (item) guardPets.push(item)
+  })
+  indoorPets.sort((a: any, b: any) => {
+    if (a.gender === 2 && b.gender !== 2) return -1
+    if (a.gender !== 2 && b.gender === 2) return 1
+    if (a.gender === 2) {
+      const ta = a.readyAt || Number.MAX_SAFE_INTEGER
+      const tb = b.readyAt || Number.MAX_SAFE_INTEGER
+      return ta - tb
+    }
+    return 0
   })
   const gardenPlots = extractHomePlants(deps, homeInfo)
   const createdAt = normalizeEpochSeconds(res?.meta?.created_at)

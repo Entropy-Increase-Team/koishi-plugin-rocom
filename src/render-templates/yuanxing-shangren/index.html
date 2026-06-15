@@ -31,6 +31,16 @@
     --card-bg: rgba(255, 252, 247, 0.82);
     --tag-bg: rgba(255, 214, 153, 0.4);
     --tag-text: #9a5f19;
+    --accent-color: #a0631d;
+    --warning-color: #bf5f3f;
+    --border-color: rgba(179, 123, 45, 0.2);
+    --border-color-light: rgba(118, 97, 74, 0.14);
+    --weekend-color: #c04030;
+    --normal-color: #2a8040;
+    --round-color: #2a60b0;
+    --weekend-bg: rgba(220, 80, 60, 0.15);
+    --normal-bg: rgba(60, 160, 80, 0.15);
+    --round-bg: rgba(60, 120, 220, 0.15);
 }
 
 html,
@@ -39,7 +49,7 @@ body {
     height: auto;
     font-family: var(--font-family);
     color: var(--text-1);
-    background: #ece3d3;
+    background: linear-gradient(135deg, #fff8eb, #fff0d2);
 }
 
 .merchant-page {
@@ -47,7 +57,7 @@ body {
     width: min(1280px, 100%);
     margin: 0 auto;
     overflow: hidden;
-    background: #ece3d3;
+    background: linear-gradient(135deg, #fff8eb, #fff0d2);
 }
 
 .background {
@@ -133,14 +143,14 @@ body {
     padding: 10px 16px;
     border-radius: 999px;
     background: rgba(255,255,255,0.72);
-    border: 1px solid rgba(179, 123, 45, 0.2);
+    border: 1px solid var(--border-color);
     color: var(--text-2);
     font-size: 18px;
 }
 
 .summary-chip strong {
     font-family: var(--font-family-accent);
-    color: #a0631d;
+    color: var(--accent-color);
     font-size: 28px;
     margin-left: 8px;
 }
@@ -163,14 +173,14 @@ body {
 }
 
 .countdown-pill {
-    color: #bf5f3f;
+    color: var(--warning-color);
     font-weight: 700;
 }
 
 .products-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
     margin-top: 18px;
 }
 
@@ -181,17 +191,17 @@ body {
     align-items: center;
     min-height: 148px;
     padding: 18px 28px;
-    border: 1px solid rgba(118, 97, 74, 0.14);
+    border: 1px solid rgba(200, 140, 40, 0.4);
     border-radius: 22px;
-    background: linear-gradient(135deg, rgba(255,255,255,0.72), rgba(244,236,224,0.88));
-    box-shadow: 0 10px 26px rgba(58, 39, 21, 0.06);
+    background: linear-gradient(135deg, rgba(255,248,235,0.88), rgba(255,240,210,0.9));
+    box-shadow: 0 6px 22px rgba(180, 120, 20, 0.08);
 }
 
 .product-image-container {
     width: 120px;
     height: 120px;
     border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.94), rgba(239,228,210,0.92));
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.94), rgba(255,240,210,0.92));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -244,8 +254,8 @@ body {
     padding: 10px 14px;
     border-radius: 16px;
     background: rgba(255,255,255,0.72);
-    border: 1px solid rgba(179, 123, 45, 0.18);
-    color: #8b5e2b;
+    border: 1px solid var(--border-color);
+    color: var(--accent-color);
     font-size: 18px;
     font-weight: 700;
 }
@@ -254,10 +264,53 @@ body {
     text-align: center;
     padding: 30px 18px;
     border-radius: 22px;
-    border: 1px dashed rgba(120, 102, 81, 0.35);
+    border: 1px dashed rgba(200, 140, 40, 0.35);
     color: #5c4a37;
     font-size: 22px;
-    background: rgba(255,255,255,0.52);
+    background: rgba(255,248,235,0.6);
+}
+
+.category-section {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.category-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 4px;
+}
+
+.category-title {
+    font-family: var(--font-family-accent);
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text-1);
+}
+
+.category-tag {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.category-tag.weekend {
+    background: var(--weekend-bg);
+    color: var(--weekend-color);
+}
+
+.category-tag.normal {
+    background: var(--normal-bg);
+    color: var(--normal-color);
+}
+
+.category-tag.round {
+    background: var(--round-bg);
+    color: var(--round-color);
 }
 
 @media (max-width: 760px) {
@@ -345,20 +398,24 @@ body {
             </div>
 
             <div class="products-grid">
-                {{if products && products.length > 0}}
-                {{each products product}}
-                <div class="product-card">
-                    <div class="product-image-container">
-                        <img class="product-image" src="{{product.image}}" alt="{{product.name}}">
+                {{if categories && categories.length > 0}}
+                {{each categories cat}}
+                <div class="category-section">
+                    <div class="category-header">
+                        <span class="category-title">{{cat.label}}</span>
+                        <span class="category-tag {{cat.key}}">{{cat.products.length}} 件</span>
                     </div>
-                    <div class="product-main">
-                        <div class="product-name">{{product.name}}</div>
-                        <div class="product-sub">远行商人当前轮次商品</div>
-                        <div class="product-time">北京时间 {{product.time_label}}</div>
+                    {{each cat.products product}}
+                    <div class="product-card">
+                        <div class="product-image-container">
+                            <img class="product-image" src="{{product.image}}" alt="{{product.name}}">
+                        </div>
+                        <div class="product-main">
+                            <div class="product-name">{{product.name}}</div>
+                            <div class="product-time">北京时间 {{product.time_label}}</div>
+                        </div>
                     </div>
-                    <div class="product-side">
-                        <div class="product-slot">本轮商品</div>
-                    </div>
+                    {{/each}}
                 </div>
                 {{/each}}
                 {{else}}

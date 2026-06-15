@@ -24,6 +24,54 @@ type MerchantRoundInfo = {
   round_id: string
 }
 
+type MerchantCategoryKey = 'normal' | 'round' | 'weekend'
+
+const CATEGORY_ORDER: MerchantCategoryKey[] = ['normal', 'round', 'weekend']
+const CATEGORY_LABELS: Record<MerchantCategoryKey, string> = {
+  normal: '热销商品',
+  round: '常规商品',
+  weekend: '周末限定',
+}
+
+const CHINA_TIMEZONE = 'Asia/Shanghai'
+const chinaPartsFormatter = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: CHINA_TIMEZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
+
+function getChinaParts(timestampMs: number) {
+  const parts: Record<string, string> = {}
+  for (const item of chinaPartsFormatter.formatToParts(new Date(timestampMs))) {
+    if (item.type !== 'literal') parts[item.type] = item.value
+  }
+  return {
+    hour: Number(parts.hour || '0'),
+    minute: Number(parts.minute || '0'),
+  }
+}
+
+function classifyMerchantItem(item: any): MerchantCategoryKey {
+  const start = normalizeTimestamp(item?.start_time)
+  const end = normalizeTimestamp(item?.end_time)
+  if (!start || !end) return 'normal'
+
+  const durationDays = (end - start) / (1000 * 60 * 60 * 24)
+  if (durationDays >= 2) return 'weekend'
+
+  const startParts = getChinaParts(start)
+  const endParts = getChinaParts(end)
+  const startHour = startParts.hour + startParts.minute / 60
+  const endHour = endParts.hour + endParts.minute / 60
+  if (startHour <= 8 && endHour >= 23.5) return 'normal'
+
+  return 'round'
+}
+
 function normalizeTimestamp(value: any): number | null {
   if (value === null || value === undefined || value === '') return null
   const timestamp = Number(value)
@@ -65,13 +113,28 @@ function getMerchantActivity(res: any): any {
 
 function getActiveProducts(res: any): any[] {
   const activity = getMerchantActivity(res)
-  const products = activity?.products || activity?.product_list || activity?.get_props || []
-  return products.filter((p: any) => {
-    const now = Date.now()
-    const start = normalizeTimestamp(p.start_time) ?? 0
-    const end = normalizeTimestamp(p.end_time) ?? Infinity
-    return now >= start && now < end
-  })
+  const groups: any[][] = []
+  if (Array.isArray(activity?.products)) groups.push(activity.products)
+  if (Array.isArray(activity?.product_list)) groups.push(activity.product_list)
+  if (Array.isArray(activity?.get_props)) groups.push(activity.get_props)
+  if (Array.isArray(activity?.get_extra_props)) groups.push(activity.get_extra_props)
+  if (Array.isArray(activity?.get_pets)) groups.push(activity.get_pets)
+
+  const merged: any[] = []
+  const seen = new Set<string>()
+  const now = Date.now()
+  for (const list of groups) {
+    for (const item of list) {
+      const start = normalizeTimestamp(item?.start_time) ?? 0
+      const end = normalizeTimestamp(item?.end_time) ?? Infinity
+      if (now < start || now >= end) continue
+      const key = `${item?.id ?? ''}|${item?.name ?? ''}|${start}|${end === Infinity ? 'inf' : end}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      merged.push(item)
+    }
+  }
+  return merged
 }
 
 function getCurrentMerchantRound(): MerchantRoundInfo {
@@ -153,23 +216,60 @@ function buildMerchantRenderPayload(res: any) {
   const products = getActiveProducts(res)
   const roundInfo = getCurrentMerchantRound()
   const activity = getMerchantActivity(res)
+
+  const renderedProducts = products.map((p: any) => ({
+    name: p.name || TEXT.unknown,
+    image: p.icon_url || '',
+    time_label: formatProductWindow(p),
+    category: classifyMerchantItem(p),
+  }))
+
+  const categoryMap: Record<MerchantCategoryKey, typeof renderedProducts> = {
+    normal: [],
+    round: [],
+    weekend: [],
+  }
+  for (const product of renderedProducts) {
+    categoryMap[product.category].push(product)
+  }
+  const categories = CATEGORY_ORDER
+    .filter(key => categoryMap[key].length > 0)
+    .map(key => ({
+      key,
+      label: CATEGORY_LABELS[key],
+      products: categoryMap[key],
+    }))
+
   const data = {
     background: '',
     title: activity.name || TEXT.merchant,
     subtitle: activity.start_date || '\u6bcf\u65e5 08:00 / 12:00 / 16:00 / 20:00 \u5237\u65b0',
     titleIcon: true,
-    product_count: products.length,
+    product_count: renderedProducts.length,
     round_info: roundInfo,
-    products: products.map((p: any) => ({
-      name: p.name || TEXT.unknown,
-      image: p.icon_url || '',
-      time_label: formatProductWindow(p),
-    })),
+    categories,
+    products: renderedProducts,
   }
-  const fallback = products.length
-    ? `\u8fdc\u884c\u5546\u4eba\u5f53\u524d\u5546\u54c1\uff1a${products.map((p: any) => p.name || TEXT.unknown).join('\u3001')}\n\u8f6e\u6b21\uff1a${roundInfo.current || TEXT.notOpen}\n\u5269\u4f59\uff1a${roundInfo.countdown}`
-    : '\u5f53\u524d\u8fdc\u884c\u5546\u4eba\u6682\u65e0\u5546\u54c1\u3002'
-  return { products, roundInfo, data, fallback }
+
+  const fallbackLines: string[] = []
+  if (renderedProducts.length) {
+    fallbackLines.push(`\u8fdc\u884c\u5546\u4eba\u5f53\u524d\u5546\u54c1\uff08\u5171 ${renderedProducts.length} \u4ef6\uff09`)
+    fallbackLines.push(`\u8f6e\u6b21\uff1a${roundInfo.current || TEXT.notOpen}\uff0c\u5269\u4f59\uff1a${roundInfo.countdown}`)
+    fallbackLines.push('')
+    for (const cat of categories) {
+      fallbackLines.push(`\u3010${cat.label}\u3011`)
+      cat.products.forEach((product, index) => {
+        const tail = product.time_label ? ` (${product.time_label})` : ''
+        fallbackLines.push(`  ${index + 1}. ${product.name}${tail}`)
+      })
+      fallbackLines.push('')
+    }
+  } else {
+    fallbackLines.push('\u5f53\u524d\u8fdc\u884c\u5546\u4eba\u6682\u65e0\u5546\u54c1\u3002')
+  }
+  const fallback = fallbackLines.join('\n').trimEnd()
+
+  return { products: renderedProducts, roundInfo, data, fallback }
 }
 
 async function checkMerchantSubscriptions(deps: PluginDeps) {
