@@ -64,14 +64,15 @@ export async function sendScheduledImageWithFallback(
   fallbackText: string,
   mentionAll = false,
 ) {
-  const prefix = mentionAll ? '@全体\n' : ''
+  const buildContent = (body: any) =>
+    mentionAll ? h('message', {}, h('at', { type: 'all' }), h.text('\n'), body) : body
+
   if (!image) {
-    return sendScheduledMessage(ctx, target, `${prefix}${fallbackText}`)
+    return sendScheduledMessage(ctx, target, buildContent(h.text(fallbackText)))
   }
 
   const imageSegment = h.image(image, detectImageMime(image))
-  const content = mentionAll ? `${prefix}${imageSegment}` : imageSegment
-  const sent = await sendScheduledMessage(ctx, target, content)
+  const sent = await sendScheduledMessage(ctx, target, buildContent(imageSegment))
   if (sent) return true
-  return sendScheduledMessage(ctx, target, `${prefix}${fallbackText}`)
+  return sendScheduledMessage(ctx, target, buildContent(h.text(fallbackText)))
 }
