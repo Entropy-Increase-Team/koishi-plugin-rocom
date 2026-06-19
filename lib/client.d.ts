@@ -1,4 +1,14 @@
 import { Context } from 'koishi';
+export interface IngameTaskPollOptions {
+    /** 服务端同步等待毫秒（long-poll），这段时间内服务端会尽量直接返回结果而不入队 */
+    waitMs?: number;
+    /** 进入排队后轮询任务状态的间隔毫秒 */
+    intervalMs?: number;
+    /** 进入排队后等待任务完成的总超时毫秒 */
+    timeoutMs?: number;
+    /** 任务进入排队（拿到 task_id）时回调一次，可用于向用户发送“排队中”提示 */
+    onQueued?: (taskId: string) => void | Promise<void>;
+}
 export declare class RocomClient {
     private baseUrl;
     private apiKey;
@@ -25,6 +35,12 @@ export declare class RocomClient {
     private requestWithStatus;
     private requestIngameWithFallback;
     private getIngameTask;
+    private static normalizeTaskStatus;
+    private static extractTaskId;
+    private static isCompletedGatewayPayload;
+    private static extractCompletedIngamePayload;
+    private static taskErrorMessage;
+    private pollIngameTask;
     qqQrLogin(ctx: Context, userIdentifier: string): Promise<any>;
     qqQrStatus(ctx: Context, fwToken: string, userIdentifier: string): Promise<any>;
     wechatQrLogin(ctx: Context, userIdentifier: string): Promise<any>;
@@ -77,7 +93,7 @@ export declare class RocomClient {
     getEggExchangeSubscriptions(ctx: Context, userIdentifier?: string): Promise<any>;
     deleteEggExchangeSubscription(ctx: Context, subscriptionId: string | number, userIdentifier?: string): Promise<any>;
     getEggExchangeEvents(ctx: Context, subscriptionId: string | number, afterEventId?: string, limit?: number, userIdentifier?: string): Promise<any>;
-    ingameHomeInfo(ctx: Context, uid: string, waitMs?: number): Promise<any>;
+    ingameHomeInfo(ctx: Context, uid: string, options?: IngameTaskPollOptions): Promise<any>;
     ingameMerchantInfo(ctx: Context, shopId: string | number): Promise<any>;
     getFriendship(ctx: Context, fwToken: string, userIds: string, userIdentifier?: string): Promise<any>;
     getStudentState(ctx: Context, fwToken: string, accountType?: number, userIdentifier?: string): Promise<any>;

@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>今日远行商人</title>
+<style>
+  @font-face {
+    font-family: 'RocoName';
+    src: url('{{_res_path}}ttf/dundun.xHd_Ee5-.woff2') format('woff2');
+    font-weight: normal; font-style: normal;
+  }
+  @font-face {
+    font-family: 'RocoProduct';
+    src: url('{{_res_path}}ttf/造字工房启黑体.ttf') format('truetype');
+    font-weight: normal; font-style: normal;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    background: #1a1a2e;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    position: relative;
+    width: 1080px;
+    height: {{pageHeight}}px;
+    background: #f4eee0;
+    overflow: visible;
+    zoom: 0.5;
+  }
+
+  .title-bg {
+    position: absolute;
+    left: 20px;
+    top: 21px;
+    width: 1041px;
+    height: 535px;
+    object-fit: contain;
+    z-index: 2;
+  }
+
+  .time-group {
+    position: absolute;
+    left: 372px;
+    top: 447px;
+    display: flex;
+    align-items: flex-end;
+    gap: 0;
+    z-index: 3;
+    overflow: visible;
+  }
+  .time-date {
+    font-family: 'RocoProduct', sans-serif;
+    font-size: 32px;
+    color: #817873;
+    letter-spacing: -0.05em;
+    line-height: 1;
+    filter: url(#timeStroke10);
+    overflow: visible;
+    position: relative;
+    left: -30px;
+    z-index: 2;
+  }
+  .time-range {
+    font-family: 'RocoProduct', sans-serif;
+    font-size: 50px;
+    color: #f0c946;
+    letter-spacing: -0.05em;
+    line-height: 1;
+    filter: url(#timeStroke10);
+    overflow: visible;
+    position: relative;
+    z-index: 1;
+  }
+
+  .goods-card {
+    position: absolute;
+    left: 20px;
+    width: 1043px;
+    height: 308px;
+    overflow: visible;
+  }
+  .goods-card.ended {
+    opacity: 0.5;
+  }
+  .goods-card.ended .goods-name {
+    color: #878070;
+  }
+  .goods-card.ended .goods-name-shadow {
+    color: #c8c2b8;
+  }
+  .goods-card.ended .price-value {
+    background: linear-gradient(to bottom, #878070, #878070);
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+  .goods-card.ended .price-sep,
+  .goods-card.ended .price-unit {
+    color: #878070;
+  }
+
+  .goods-card-bg {
+    position: absolute;
+    left: 0; top: 0;
+    width: 1043px;
+    height: 308px;
+    border-radius: 15px;
+    background: #cec8bc;
+  }
+
+  .goods-name-wrap {
+    position: absolute;
+    top: -8px;
+    left: -22px;
+    width: 800px;
+    text-align: center;
+    transform: scaleX(1.1);
+    transform-origin: center center;
+    overflow: visible;
+  }
+  .goods-name-shadow {
+    position: absolute;
+    left: 50%;
+    top: 4px;
+    transform: translateX(-50%);
+    font-family: 'RocoProduct', sans-serif;
+    font-size: 150px;
+    color: #f4eee0;
+    letter-spacing: 2px;
+    line-height: 1;
+    white-space: nowrap;
+    pointer-events: none;
+    filter: url(#imgStroke11NoOffset);
+    overflow: visible;
+  }
+  .goods-name {
+    position: relative;
+    font-family: 'RocoProduct', sans-serif;
+    font-size: 150px;
+    color: #3f3832;
+    letter-spacing: 2px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .goods-img-wrap {
+    position: absolute;
+    left: 725px;
+    top: 31px;
+    width: 296px;
+    height: 246px;
+    z-index: 1;
+    overflow: visible;
+  }
+  .goods-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: url(#imgStroke11);
+    overflow: visible;
+  }
+  .hot-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 37.5%;
+    height: 37.5%;
+    z-index: 2;
+    object-fit: contain;
+  }
+
+  .num-badge {
+    position: absolute;
+    left: 745px;
+    top: -15px;
+    width: 74px;
+    height: 53px;
+    z-index: 2;
+  }
+  .num-badge-bg {
+    position: absolute;
+    left: 0; top: 0;
+    width: 100%; height: 100%;
+    object-fit: contain;
+  }
+  .num-badge-text {
+    position: absolute;
+    left: 0; top: 0;
+    width: 100%; height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'RocoName', sans-serif;
+    font-size: 28px;
+    color: #f5efe3;
+    letter-spacing: -0.05em;
+    z-index: 1;
+    padding-top: 2px;
+  }
+
+  .price-group {
+    position: absolute;
+    left: 181px;
+    top: 134px;
+    width: 393px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1;
+  }
+  .price-inner {
+    display: flex;
+    align-items: flex-end;
+    overflow: visible;
+  }
+  .coin-icon {
+    width: 91px;
+    height: 90px;
+    object-fit: contain;
+    position: relative;
+    filter: url(#imgStroke11NoOffset);
+    overflow: visible;
+  }
+
+  .price-value-wrap {
+    position: relative;
+    display: inline-block;
+    margin-left: -2px;
+    overflow: visible;
+    z-index: 1;
+  }
+  .price-shadow {
+    position: absolute;
+    left: 2px; top: 4px;
+    font-family: 'RocoName', sans-serif;
+    font-size: 120px;
+    color: #f4eee0;
+    line-height: 1;
+    letter-spacing: -0.1em;
+    transform: scaleX(1.1);
+    transform-origin: left center;
+    white-space: nowrap;
+    pointer-events: none;
+    filter: url(#imgStroke11NoOffset);
+    overflow: visible;
+  }
+
+  .price-value {
+    font-family: 'RocoName', sans-serif;
+    font-size: 120px;
+    background: linear-gradient(to bottom, #d07338, #dd9036);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.1em;
+    line-height: 1;
+    transform: scaleX(1.1);
+    transform-origin: left center;
+    position: relative;
+    display: block;
+  }
+
+  .price-sep {
+    font-family: 'RocoName', sans-serif;
+    font-size: 120px;
+    color: #837f76;
+    line-height: 1;
+    margin-left: 9px;
+    position: relative;
+    overflow: visible;
+    z-index: 2;
+  }
+  .price-sep::after {
+    content: attr(data-text);
+    position: absolute;
+    left: 2px;
+    top: 4px;
+    color: #f4eee0;
+    z-index: -1;
+    pointer-events: none;
+    filter: url(#imgStroke11NoOffset);
+  }
+
+  .price-unit {
+    font-family: 'RocoName', sans-serif;
+    font-size: 50px;
+    color: #837f76;
+    line-height: 1;
+    position: relative;
+    bottom: 15px;
+    margin-left: -8px;
+    overflow: visible;
+  }
+  .price-unit::after {
+    content: attr(data-text);
+    position: absolute;
+    left: 2px;
+    top: 4px;
+    color: #f4eee0;
+    z-index: -1;
+    pointer-events: none;
+    filter: url(#imgStroke11NoOffset);
+  }
+
+  .limit-area {
+    position: absolute;
+    left: 377px;
+    top: 243px;
+    min-width: 393px;
+    width: auto;
+    height: 54px;
+    z-index: 1;
+    transform: translateX(-50%);
+  }
+  .limit-btn {
+    position: absolute;
+    left: 0; top: 0;
+    width: 100%; height: 100%;
+    border-radius: 14px;
+    background: #878070;
+    border: none;
+    box-shadow: 0 0 0 8px #f4ede5;
+  }
+  .limit-text {
+    position: relative;
+    left: 0; top: 0;
+    width: 100%; height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'RocoName', sans-serif;
+    font-size: 36px;
+    color: #fdf7e9;
+    letter-spacing: 0;
+    white-space: nowrap;
+    padding: 0 20px;
+  }
+
+  .bottom-img {
+    position: absolute;
+    left: 0;
+    width: 1080px;
+    height: 160px;
+    object-fit: contain;
+    z-index: 2;
+  }
+
+  .goods-card-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .goods-empty-text {
+    position: relative;
+    z-index: 1;
+    font-family: 'RocoProduct', sans-serif;
+    font-size: 64px;
+    color: #878070;
+    text-align: center;
+    letter-spacing: 4px;
+  }
+</style>
+</head>
+<body>
+
+<svg style="position:absolute;width:0;height:0;">
+  <defs>
+    <filter id="imgStroke11" x="-10%" y="-10%" width="120%" height="120%"
+            color-interpolation-filters="sRGB">
+      <feFlood flood-color="#f4eee0" result="color"/>
+      <feMorphology in="SourceAlpha" operator="dilate" radius="11" result="dilated"/>
+      <feComposite in="color" in2="dilated" operator="in" result="outline"/>
+      <feOffset in="outline" dx="3" dy="3" result="offset"/>
+      <feMerge>
+        <feMergeNode in="offset"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="imgStroke11NoOffset" x="-10%" y="-10%" width="120%" height="120%"
+            color-interpolation-filters="sRGB">
+      <feFlood flood-color="#f4eee0" result="color"/>
+      <feMorphology in="SourceAlpha" operator="dilate" radius="11" result="dilated"/>
+      <feComposite in="color" in2="dilated" operator="in" result="outline"/>
+      <feMerge>
+        <feMergeNode in="outline"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="timeStroke10" x="-10%" y="-10%" width="120%" height="120%"
+            color-interpolation-filters="sRGB">
+      <feFlood flood-color="#3f3832" result="color"/>
+      <feMorphology in="SourceAlpha" operator="dilate" radius="10" result="dilated"/>
+      <feComposite in="color" in2="dilated" operator="in" result="outline"/>
+      <feMerge>
+        <feMergeNode in="outline"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+</svg>
+
+  <div id="container" class="page">
+    <img class="title-bg" src="{{_res_path}}render/yuanxing-shangren/img/标题.png" alt="标题">
+
+    <div class="time-group">
+      <span class="time-date">{{dateStr}}</span>
+      <span class="time-range">08:00-24:00</span>
+    </div>
+
+    {{if goods && goods.length > 0}}
+    {{each goods item}}
+    <div class="goods-card{{if item.isEnded}} ended{{/if}}" style="top: {{item.top}}px">
+      <div class="goods-card-bg"></div>
+      <div class="goods-name-wrap">
+        <span class="goods-name-shadow">{{item.goods_name}}</span>
+        <span class="goods-name">{{item.goods_name}}</span>
+      </div>
+      <div class="num-badge">
+        <img class="num-badge-bg" src="{{_res_path}}render/yuanxing-shangren/img/编号背景框.png" alt="">
+        <div class="num-badge-text">{{item.num}}</div>
+      </div>
+      <div class="goods-img-wrap">
+        <img class="goods-img" src="{{item.iconUrl}}" alt="{{item.goods_name}}">
+        {{if item.isHot}}<img class="hot-badge" src="{{_res_path}}render/yuanxing-shangren/img/热销.png" alt="热销">{{/if}}
+      </div>
+      <div class="price-group">
+        <img class="coin-icon" src="{{_res_path}}render/yuanxing-shangren/img/coin.png" alt="coin">
+        <div class="price-inner">
+          <span class="price-value-wrap">
+            <span class="price-shadow">{{item.price}}</span>
+            <span class="price-value">{{item.price}}</span>
+          </span>
+          <span class="price-sep" data-text="/">/</span>
+          <span class="price-unit" data-text="个">个</span>
+        </div>
+      </div>
+      <div class="limit-area">
+        <div class="limit-btn"></div>
+        <div class="limit-text">{{item.remainingStr}}</div>
+      </div>
+    </div>
+    {{/each}}
+    {{else}}
+    <div class="goods-card goods-card-empty" style="top: 592px">
+      <div class="goods-card-bg"></div>
+      <div class="goods-empty-text">暂无商品</div>
+    </div>
+    {{/if}}
+
+    <img class="bottom-img" src="{{_res_path}}render/yuanxing-shangren/img/底部信息框.png" alt="底部信息框" style="top: {{bottomFrameTop}}px">
+  </div>
+
+</body>
+</html>

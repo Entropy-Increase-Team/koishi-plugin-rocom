@@ -29,6 +29,11 @@ const TEMPLATE_VIEWPORTS: Record<string, TemplateViewport> = {
   activities: { width: 1600, height: 1200, deviceScaleFactor: 2 },
 }
 
+const VISUAL_BOUNDS_TEMPLATES = new Set([
+  'yuanxing-shangren/merchant',
+  'yuanxing-shangren/today',
+])
+
 const DEFAULT_SCREENSHOT_OPTIONS = {
   type: 'jpeg' as const,
   quality: 82,
@@ -166,6 +171,7 @@ export class Renderer {
           '.student-perks-page',
           '.student-page',
           '.merchant-page',
+          '.page',
           '.home-page',
           '.pet-panel-page',
           '.pet-detail-page',
@@ -184,16 +190,17 @@ export class Renderer {
         if (target) {
           const box = await target.boundingBox()
           if (box && box.width > 0 && box.height > 0) {
-            const elementMetrics = await page.evaluate((el: Element) => {
+            const useVisualBounds = VISUAL_BOUNDS_TEMPLATES.has(templateName)
+            const elementMetrics = await page.evaluate((el: Element, visualBounds: boolean) => {
               const rect = el.getBoundingClientRect()
               const element = el as HTMLElement
               return {
                 x: rect.left + window.scrollX,
                 y: rect.top + window.scrollY,
-                width: Math.max(rect.width, element.scrollWidth, element.offsetWidth),
-                height: Math.max(rect.height, element.scrollHeight, element.offsetHeight),
+                width: visualBounds ? rect.width : Math.max(rect.width, element.scrollWidth, element.offsetWidth),
+                height: visualBounds ? rect.height : Math.max(rect.height, element.scrollHeight, element.offsetHeight),
               }
-            }, target)
+            }, target, useVisualBounds)
 
             const capturePadding = TEMPLATE_CAPTURE_PADDING[templateName] || { left: 0, right: 0, top: 0, bottom: 0 }
             await page.setViewport({

@@ -418,14 +418,21 @@ export class RocomClient {
 
   // 判断一份 payload 是否为“已完成的业务结果”（而非排队占位）。
   // 家园接口完成时返回 rows/home_info；玩家、商店完成时返回 source/title/rows。
-  private static isCompletedIngamePayload(payload: any): boolean {
+  private static isCompletedGatewayPayload(payload: any): boolean {
     if (!payload || typeof payload !== 'object') return false
-    if (RocomClient.extractTaskId(payload)) return false
     if (Array.isArray(payload.rows)) return true
     if (payload.home_info !== undefined) return true
     if (payload.source !== undefined) return true
     if (String(payload.title || '').trim()) return true
     return false
+  }
+
+  private static extractCompletedIngamePayload(payload: any): any {
+    if (!payload || typeof payload !== 'object') return null
+    if (RocomClient.isCompletedGatewayPayload(payload)) return payload
+    if (RocomClient.isCompletedGatewayPayload(payload.result)) return payload.result
+    if (RocomClient.isCompletedGatewayPayload(payload.data)) return payload.data
+    return null
   }
 
   private static taskErrorMessage(payload: any, fallbackStatus = ''): string {
@@ -451,8 +458,9 @@ export class RocomClient {
   ): Promise<any> {
     const { status, data, usedApiKey } = first
 
-    // 服务端在 wait_ms 内已直接返回业务结果，无需排队。
-    if (status !== null && RocomClient.isCompletedIngamePayload(data)) return data
+    // 服务端在 wait_ms 内已直接返回业务结果，或任务壳里已经带了完成结果。
+    const initialCompletedPayload = RocomClient.extractCompletedIngamePayload(data)
+    if (status !== null && initialCompletedPayload) return initialCompletedPayload
 
     const taskId = RocomClient.extractTaskId(data)
     if (!taskId) {
@@ -486,7 +494,8 @@ export class RocomClient {
       const task = await this.getIngameTask(ctx, taskId, usedApiKey)
       if (task.status === null) return null
 
-      if (RocomClient.isCompletedIngamePayload(task.data)) return task.data
+      const completedPayload = RocomClient.extractCompletedIngamePayload(task.data)
+      if (completedPayload) return completedPayload
 
       lastStatus = RocomClient.normalizeTaskStatus(task.data?.status)
 
@@ -497,9 +506,13 @@ export class RocomClient {
 
       // 状态标记完成，但结果可能嵌套在 result/data 中。
       if (INGAME_COMPLETED_STATUSES.includes(lastStatus)) {
-        if (RocomClient.isCompletedIngamePayload(task.data?.result)) return task.data.result
-        if (RocomClient.isCompletedIngamePayload(task.data?.data)) return task.data.data
-        return task.data
+        this.setLastError(`Ingame 任务已完成但未返回可解析结果：${taskId}`)
+        return null
+      }
+
+      if (lastStatus && !INGAME_PENDING_STATUSES.includes(lastStatus)) {
+        this.setLastError(`Ingame 任务状态异常：${lastStatus}`)
+        return null
       }
 
       // 既无 task_id 也无状态，说明拿到的就是裸结果。
@@ -683,7 +696,10 @@ export class RocomClient {
   }
 
   async getMerchantInfo(ctx: Context, refresh = false) {
-    return this.get(ctx, '/api/v1/games/rocom/merchant/info', this.wegameHeaders(), { refresh: refresh ? 'true' : 'false' })
+    return this.get(ctx, '/api/v1/games/rocom/merchant/info', this.wegameHeaders(), {
+      refresh: refresh ? 'true' : 'false',
+      random_goods: 'all',
+    })
   }
 
   async queryPetSize(ctx: Context, diameter: number, weight: number, sameRideEgg = false, userIdentifier = '') {

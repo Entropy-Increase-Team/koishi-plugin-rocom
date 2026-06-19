@@ -1,18 +1,13 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>今日远行商人</title>
-    <style>
+/* 今日远行商人样式 - 从today.html中提取 */
+
 @font-face {
     font-family: "fzlant";
-    src: url("{{_res_path}}ttf/fzlant.D5FI9Et0.ttf");
+    src: url("../../ttf/fzlant.D5FI9Et0.ttf");
 }
 
 @font-face {
     font-family: "dundun";
-    src: url("{{_res_path}}ttf/dundun.xHd_Ee5-.woff2");
+    src: url("../../ttf/dundun.xHd_Ee5-.woff2");
 }
 
 * {
@@ -369,88 +364,3 @@ body {
     background: var(--round-bg);
     color: var(--round-color);
 }
-    </style>
-</head>
-<body>
-    <div id="container" class="merchant-page">
-        <div class="background" style="background-image: url('{{background}}');"></div>
-        <div class="content-container">
-            <div class="header">
-                <div class="title-section">
-                    <div class="title-main">
-                        <div class="title-badge">
-                            <img src="{{_res_path}}img/yuanxingshangren.png" alt="今日远行商人">
-                        </div>
-                        <span class="title-text">{{title}}</span>
-                    </div>
-                    <div class="subtitle">{{subtitle}}</div>
-                </div>
-                <div class="header-side">
-                    <div class="summary-chip">今日商品数 <strong>{{total_products}}</strong></div>
-                </div>
-            </div>
-
-            {{if total_products > 0}}
-            {{each categories cat}}
-            <div class="category-section">
-                <div class="category-header">
-                    <span class="category-title">{{cat.label}}</span>
-                    <span class="category-count {{cat.key}}">{{cat.product_count}} 件</span>
-                </div>
-                {{if cat.key === 'round'}}
-                {{each cat.roundGroups group}}
-                <div class="round-section {{if group.is_current}}is-current{{/if}}">
-                    <div class="round-header">
-                        <span class="round-title">第{{group.round_id}}轮 {{group.label}}</span>
-                        {{if group.is_current}}
-                        <span class="round-badge current">当前轮次</span>
-                        {{/if}}
-                    </div>
-                    {{if group.products && group.products.length > 0}}
-                    <div class="products-grid">
-                        {{each group.products product}}
-                        <div class="product-card">
-                            <div class="product-image-container">
-                                <img class="product-image" src="{{product.image}}" alt="{{product.name}}">
-                            </div>
-                            <div class="product-main">
-                                <div class="product-name">{{product.name}}</div>
-                                <div class="product-time">北京时间 {{product.time_label}}</div>
-                            </div>
-                            <div class="product-side">
-                                <div class="product-slot">第{{group.round_id}}轮</div>
-                            </div>
-                        </div>
-                        {{/each}}
-                    </div>
-                    {{else}}
-                    <div class="round-empty">该轮次暂无商品</div>
-                    {{/if}}
-                </div>
-                {{/each}}
-                {{else}}
-                <div class="products-grid">
-                    {{each cat.roundGroups group}}
-                    {{each group.products product}}
-                    <div class="product-card">
-                        <div class="product-image-container">
-                            <img class="product-image" src="{{product.image}}" alt="{{product.name}}">
-                        </div>
-                        <div class="product-main">
-                            <div class="product-name">{{product.name}}</div>
-                            <div class="product-time">北京时间 {{product.time_label}}</div>
-                        </div>
-                    </div>
-                    {{/each}}
-                    {{/each}}
-                </div>
-                {{/if}}
-            </div>
-            {{/each}}
-            {{else}}
-            <div class="all-empty">今日暂无已公布的远行商人商品，稍后再来看看。</div>
-            {{/if}}
-        </div>
-    </div>
-</body>
-</html>

@@ -13,3 +13,5 @@ lib/render-templates/
 
 # Local npm pack artifacts
 *.tgz
+MERCHANT_UPDATE_SUMMARY.md
+src/render-templates/yuanxing-shangren/CHANGELOG.md
