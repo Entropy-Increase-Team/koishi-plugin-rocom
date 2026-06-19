@@ -65,6 +65,13 @@ type MerchantCardItem = {
   top: number
 }
 
+type LegacyMerchantRoundGroup = {
+  round_id: number
+  label: string
+  is_current: boolean
+  products: MerchantProductForRender[]
+}
+
 const CHINA_TIMEZONE = 'Asia/Shanghai'
 const chinaPartsFormatter = new Intl.DateTimeFormat('zh-CN', {
   timeZone: CHINA_TIMEZONE,
@@ -412,6 +419,47 @@ function buildMerchantFallbackText(title: string, products: MerchantProductForRe
   return fallbackLines.join('\n').trimEnd()
 }
 
+function getMerchantActivityTitle(res: any) {
+  const activity = getMerchantActivity(res)
+  return String(activity?.name || TEXT.merchant).trim() || TEXT.merchant
+}
+
+function getMerchantActivitySubtitle(res: any) {
+  const activity = getMerchantActivity(res)
+  return String(activity?.start_date || '每日 08:00 / 12:00 / 16:00 / 20:00 刷新').trim()
+}
+
+function getLegacyRoundGroups(now: Date, roundInfo: MerchantRoundInfo): LegacyMerchantRoundGroup[] {
+  return ROUND_WINDOWS.map(win => ({
+    round_id: win.id,
+    label: `${padNumber(win.startHour)}:00 - ${padNumber(win.endHour)}:00`,
+    is_current: roundInfo.current === win.id,
+    products: [],
+  }))
+}
+
+function buildLegacyCategoryGroups(products: MerchantProductForRender[], roundGroups: LegacyMerchantRoundGroup[]) {
+  return CATEGORY_ORDER
+    .map((key) => {
+      const groups = roundGroups
+        .map(group => ({
+          round_id: group.round_id,
+          label: group.label,
+          is_current: group.is_current,
+          products: group.products.filter(product => product.category === key),
+        }))
+        .filter(group => group.products.length > 0)
+
+      return {
+        key,
+        label: CATEGORY_LABELS[key],
+        roundGroups: groups,
+        product_count: groups.reduce((sum, group) => sum + group.products.length, 0),
+      }
+    })
+    .filter(category => category.product_count > 0)
+}
+
 function getMerchantDateStr(now = new Date()) {
   const parts = getChinaParts(now)
   return `${parts.month}.${parts.day}`
@@ -429,6 +477,27 @@ function buildMerchantRenderPayload(res: any, now = new Date()) {
     dateStr: getMerchantDateStr(now),
     timeRange,
     ...buildMerchantCardItems(products, res, { includeEnded: false }),
+  }
+  const fallback = buildMerchantFallbackText(TEXT.merchant, products, roundInfo)
+
+  return { products, roundInfo, data, fallback }
+}
+
+function buildLegacyMerchantRenderPayload(res: any, now = new Date()) {
+  const allProducts = normalizeMerchantProducts(res, now)
+  const roundInfo = getCurrentMerchantRound(now)
+  const products = getCurrentMerchantProducts(allProducts, roundInfo)
+  const roundGroups = getLegacyRoundGroups(now, roundInfo)
+  const currentGroup = roundGroups.find(group => group.round_id === roundInfo.current) || roundGroups[0]
+  currentGroup.products.push(...products)
+  const categories = buildLegacyCategoryGroups(products, roundGroups)
+  const data = {
+    background: '',
+    title: getMerchantActivityTitle(res),
+    subtitle: getMerchantActivitySubtitle(res),
+    categories,
+    roundGroups,
+    total_products: products.length,
   }
   const fallback = buildMerchantFallbackText(TEXT.merchant, products, roundInfo)
 
@@ -453,14 +522,72 @@ function buildTodayMerchantRenderPayload(res: any, now = new Date()) {
   return { products, data, fallback }
 }
 
+function buildLegacyTodayMerchantRenderPayload(res: any, now = new Date()) {
+  const allProducts = normalizeMerchantProducts(res, now)
+    .filter(product => {
+      const source = {
+        start_time: product.start_time,
+        end_time: product.end_time,
+      }
+      return isMerchantItemToday(source, now)
+    })
+  const roundInfo = getCurrentMerchantRound(now)
+  const roundGroups = getLegacyRoundGroups(now, roundInfo)
+
+  for (const product of allProducts) {
+    const roundId = product.category === 'round' ? product.round_id : null
+    const group = roundId
+      ? roundGroups.find(item => item.round_id === roundId)
+      : roundGroups[0]
+    if (group) group.products.push(product)
+  }
+
+  const categories = buildLegacyCategoryGroups(allProducts, roundGroups)
+  const data = {
+    background: '',
+    title: TEXT.todayMerchant,
+    subtitle: `${getChinaDateText(now)} · 每日 08:00 / 12:00 / 16:00 / 20:00 刷新`,
+    categories,
+    roundGroups,
+    total_products: allProducts.length,
+  }
+  const fallback = buildMerchantFallbackText(`今日远行商人 (${getChinaDateText(now)})`, allProducts)
+
+  return { products: allProducts, data, fallback }
+}
+
+function useLegacyMerchantUi(deps: PluginDeps) {
+  return deps.config.merchantUiStyle === 'old'
+}
+
+function buildConfiguredMerchantRenderPayload(deps: PluginDeps, res: any, now = new Date()) {
+  const payload = useLegacyMerchantUi(deps)
+    ? buildLegacyMerchantRenderPayload(res, now)
+    : buildMerchantRenderPayload(res, now)
+  return {
+    ...payload,
+    templateName: useLegacyMerchantUi(deps) ? 'yuanxing-shangren' : 'yuanxing-shangren/merchant',
+  }
+}
+
+function buildConfiguredTodayMerchantRenderPayload(deps: PluginDeps, res: any, now = new Date()) {
+  const payload = useLegacyMerchantUi(deps)
+    ? buildLegacyTodayMerchantRenderPayload(res, now)
+    : buildTodayMerchantRenderPayload(res, now)
+  return {
+    ...payload,
+    templateName: useLegacyMerchantUi(deps) ? 'yuanxing-shangren' : 'yuanxing-shangren/today',
+  }
+}
+
 async function checkMerchantSubscriptions(deps: PluginDeps) {
   const { ctx, client, merchantSubMgr, renderer, config } = deps
   const res = await client.getMerchantInfo(ctx, true)
   if (!res) return { subscriptions: 0, matched: 0, pushed: 0 }
 
-  const { products, roundInfo, data, fallback } = buildMerchantRenderPayload(res)
+  const { products, roundInfo, data, fallback, templateName } = buildConfiguredMerchantRenderPayload(deps, res)
   const productNames = products.map((p: any) => p.name || '').filter(Boolean)
-  const rendered = await renderer.renderHtml(ctx, 'yuanxing-shangren/merchant', data)
+  const rendered = await renderer.renderHtml(ctx, templateName, data)
   const renderedImage = rendered ? compressPngImage(rendered, config) : null
   const subs = merchantSubMgr.getAll()
   let matchedCount = 0
@@ -518,8 +645,8 @@ export function register(deps: PluginDeps) {
       const res = await client.getMerchantInfo(ctx, true)
       if (!res) return `\u83b7\u53d6\u8fdc\u884c\u5546\u4eba\u6570\u636e\u5931\u8d25\uff1a${client.getLastErrorBrief()}`
 
-      const { data, fallback } = buildMerchantRenderPayload(res)
-      const png = await deps.renderer.renderHtml(ctx, 'yuanxing-shangren/merchant', data)
+      const { data, fallback, templateName } = buildConfiguredMerchantRenderPayload(deps, res)
+      const png = await deps.renderer.renderHtml(ctx, templateName, data)
       await sendImageWithFallback(session, png, fallback, 'merchant:yuanxing-shangren', deps.config)
     })
 
@@ -528,8 +655,8 @@ export function register(deps: PluginDeps) {
       const res = await client.getMerchantInfo(ctx, true)
       if (!res) return `获取今日远行商人数据失败：${client.getLastErrorBrief()}`
 
-      const { data, fallback } = buildTodayMerchantRenderPayload(res)
-      const png = await deps.renderer.renderHtml(ctx, 'yuanxing-shangren/today', data)
+      const { data, fallback, templateName } = buildConfiguredTodayMerchantRenderPayload(deps, res)
+      const png = await deps.renderer.renderHtml(ctx, templateName, data)
       await sendImageWithFallback(session, png, fallback, 'merchant:yuanxing-shangren:today', deps.config)
     })
 

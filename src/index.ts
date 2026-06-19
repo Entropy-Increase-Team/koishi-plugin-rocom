@@ -122,6 +122,7 @@ export interface Config {
   autoRefreshTime: string[]
   merchantSubscriptionEnabled: boolean
   merchantSubscriptionItems: string[]
+  merchantUiStyle: 'new' | 'old'
   merchantPrivateSubscriptionEnabled: boolean
   merchantCheckMode: 'interval' | 'times'
   merchantCheckInterval: number
@@ -153,6 +154,7 @@ export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
     merchantSubscriptionEnabled: Schema.boolean().default(true).description('启用远行商人订阅'),
     merchantSubscriptionItems: Schema.array(String).default(['国王球', '棱镜球', '炫彩精灵蛋']).description('默认订阅商品'),
+    merchantUiStyle: Schema.union(['new', 'old'] as const).default('new').description('远行商人 UI 样式：new 为新版大图卡片，old 为旧版列表卡片'),
     merchantCheckMode: Schema.union(['interval', 'times'] as const).default('interval').description('商人检查模式：interval 定期轮询 / times 指定时间点'),
     merchantCheckInterval: Schema.number().default(300000).description('商人检查间隔，单位毫秒（仅 interval 模式生效）'),
     merchantCheckTimes: Schema.array(String).default([]).description('商人定时检查时间点（HH:MM 格式，如 08:00，仅 times 模式生效）'),

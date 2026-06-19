@@ -13,6 +13,7 @@ export interface PluginConfig {
   autoRefreshTime: string[]
   merchantSubscriptionEnabled: boolean
   merchantSubscriptionItems: string[]
+  merchantUiStyle: 'new' | 'old'
   merchantPrivateSubscriptionEnabled: boolean
   merchantCheckMode: 'interval' | 'times'
   merchantCheckInterval: number
