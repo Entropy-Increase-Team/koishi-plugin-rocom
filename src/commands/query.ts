@@ -950,7 +950,7 @@ function formatPanelUpdatedAt(ts: number) {
   return new Date(value * 1000).toLocaleString('zh-CN')
 }
 
-function extractHomePet(raw: any, index: number, guard = false) {
+function extractHomePet(deps: PluginDeps, raw: any, index: number, guard = false) {
   if (!raw || typeof raw !== 'object') return null
   const homePet = raw.home_pet_info && typeof raw.home_pet_info === 'object' ? raw.home_pet_info : raw
   const display = raw.display_info && typeof raw.display_info === 'object' ? raw.display_info : {}
@@ -964,6 +964,7 @@ function extractHomePet(raw: any, index: number, guard = false) {
   const eggReady = hasEgg || (predictedEggTime > 0 && nowTs >= predictedEggTime)
   const feedRound = Number(homePet.feed_round || raw.feed_round || 0) || 0
   const gender = Number(display.gender || raw.gender || 0) || 0
+  const mutationType = Number(display.mutation_type || raw.mutation_type || homePet.mutation_type || 0) || 0
   const isMale = gender === 1
 
   const status = homePet.status ?? raw.status
@@ -1004,7 +1005,11 @@ function extractHomePet(raw: any, index: number, guard = false) {
     name: String(homePet.name || homePet.pet_name || raw.name || raw.pet_name || `精灵 ${petId || ''}`),
     level: display.level || raw.level || homePet.level || '--',
     iconUrl: homePetIcon(petId, raw.icon_url || raw.pet_img_url || raw.petIcon || ''),
+    starIconUrl: [1, 8, 9].includes(mutationType)
+      ? deps.renderer.resourceUrl(`render-templates/home/img/rocomuid/star_${mutationType}.png`)
+      : '',
     badge: isGuard ? '守' : (hasEgg ? '蛋' : ''),
+    mutationType,
     isGuard,
     statusText,
     statusClass,
@@ -1120,13 +1125,13 @@ function buildHomeRenderData(deps: PluginDeps, res: any, uid: string) {
   const indoorPets: any[] = []
   const guardPets: any[] = []
   indoorSources.forEach((raw, index) => {
-    const item = extractHomePet(raw, index)
+    const item = extractHomePet(deps, raw, index)
     if (!item) return
     if (item.isGuard) guardPets.push(item)
     else indoorPets.push(item)
   })
   guardSources.forEach((raw, index) => {
-    const item = extractHomePet(raw, index, true)
+    const item = extractHomePet(deps, raw, index, true)
     if (item) guardPets.push(item)
   })
   indoorPets.sort((a: any, b: any) => {
