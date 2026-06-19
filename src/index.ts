@@ -128,6 +128,9 @@ export interface Config {
   merchantCheckTimes: string[]
   homeSubscriptionEnabled: boolean
   homeSubscriptionIntervalMinutes: number
+  homeQueryWaitMs: number
+  homeQueryPollIntervalMs: number
+  homeQueryTimeoutMs: number
   imageCompressionEnabled: boolean
   imageCompressionMinBytes: number
   imageCompressionLevel: number
@@ -157,6 +160,11 @@ export const Config: Schema<Config> = Schema.intersect([
     homeSubscriptionEnabled: Schema.boolean().default(true).description('启用家园菜园和灵感订阅推送'),
     homeSubscriptionIntervalMinutes: Schema.number().default(5).description('家园订阅检查间隔，单位分钟'),
   }).description('订阅推送设置'),
+  Schema.object({
+    homeQueryWaitMs: Schema.number().default(5000).description('家园查询服务端同步等待毫秒（long-poll，超过此时间未出结果则转入排队）'),
+    homeQueryPollIntervalMs: Schema.number().default(3000).description('家园查询进入排队后的轮询间隔，单位毫秒'),
+    homeQueryTimeoutMs: Schema.number().default(180000).description('家园查询排队等候的总超时，单位毫秒，超时后提示稍后重试'),
+  }).description('家园查询排队设置'),
 ])
 
 export function apply(ctx: Context, config: Config) {

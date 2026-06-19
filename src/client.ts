@@ -2,6 +2,22 @@
 
 const logger = new Logger('rocom-client')
 
+// ingame 异步任务状态分类（来自服务端 /ingame/tasks/{task_id} 返回的 status 字段）
+const INGAME_PENDING_STATUSES = ['queued', 'pending', 'running', 'processing', 'accepted']
+const INGAME_FAILED_STATUSES = ['failed', 'error', 'timeout', 'cancelled', 'canceled']
+const INGAME_COMPLETED_STATUSES = ['done', 'success', 'succeeded', 'completed', 'finished']
+
+export interface IngameTaskPollOptions {
+  /** 服务端同步等待毫秒（long-poll），这段时间内服务端会尽量直接返回结果而不入队 */
+  waitMs?: number
+  /** 进入排队后轮询任务状态的间隔毫秒 */
+  intervalMs?: number
+  /** 进入排队后等待任务完成的总超时毫秒 */
+  timeoutMs?: number
+  /** 任务进入排队（拿到 task_id）时回调一次，可用于向用户发送“排队中”提示 */
+  onQueued?: (taskId: string) => void | Promise<void>
+}
+
 export class RocomClient {
   private baseUrl: string
   private apiKey: string
@@ -392,6 +408,108 @@ export class RocomClient {
     )
   }
 
+  private static normalizeTaskStatus(value: any): string {
+    return String(value ?? '').trim().toLowerCase()
+  }
+
+  private static extractTaskId(payload: any): string {
+    return String(payload?.task_id || payload?.taskId || payload?.taskID || '').trim()
+  }
+
+  // 判断一份 payload 是否为“已完成的业务结果”（而非排队占位）。
+  // 家园接口完成时返回 rows/home_info；玩家、商店完成时返回 source/title/rows。
+  private static isCompletedIngamePayload(payload: any): boolean {
+    if (!payload || typeof payload !== 'object') return false
+    if (RocomClient.extractTaskId(payload)) return false
+    if (Array.isArray(payload.rows)) return true
+    if (payload.home_info !== undefined) return true
+    if (payload.source !== undefined) return true
+    if (String(payload.title || '').trim()) return true
+    return false
+  }
+
+  private static taskErrorMessage(payload: any, fallbackStatus = ''): string {
+    const candidates = [
+      payload?.message, payload?.error, payload?.error_message, payload?.reason,
+      payload?.result?.message, payload?.result?.error, payload?.result?.error_message,
+      payload?.data?.message, payload?.data?.error,
+    ]
+    for (const candidate of candidates) {
+      const text = String(candidate ?? '').trim()
+      if (text && text.toLowerCase() !== 'failed') return text
+    }
+    return String(payload?.status || fallbackStatus || '').trim() || '任务执行失败'
+  }
+
+  // 排队等候轮询：把 ingame 接口提交后返回的 202（task_id/status=queued）轮询到出结果或超时。
+  // 入参 first 是首请求拿到的 { status, data, usedApiKey }。
+  private async pollIngameTask(
+    ctx: Context,
+    first: { status: number | null, data: any, usedApiKey: boolean },
+    options: IngameTaskPollOptions,
+    labels: { queuedNoTaskId: string, stillQueued: (taskId: string) => string },
+  ): Promise<any> {
+    const { status, data, usedApiKey } = first
+
+    // 服务端在 wait_ms 内已直接返回业务结果，无需排队。
+    if (status !== null && RocomClient.isCompletedIngamePayload(data)) return data
+
+    const taskId = RocomClient.extractTaskId(data)
+    if (!taskId) {
+      if (status === 202) this.setLastError(labels.queuedNoTaskId)
+      // 既不是任务也不是已知完成结构：把原始 data 透传给上层兼容旧逻辑。
+      return status === null ? null : data
+    }
+
+    // 已进入队列，回调通知“排队中”。
+    if (typeof options.onQueued === 'function') {
+      try {
+        await options.onQueued(taskId)
+      } catch (e) {
+        logger.warn(`ingame 排队提示回调失败: ${e}`)
+      }
+    }
+
+    const intervalMs = Math.max(300, Number(options.intervalMs) || 3000)
+    const timeoutMs = Math.max(intervalMs, Number(options.timeoutMs) || 180000)
+    const startedAt = Date.now()
+    let lastStatus = RocomClient.normalizeTaskStatus(data?.status)
+
+    while (Date.now() - startedAt < timeoutMs) {
+      if (lastStatus && INGAME_FAILED_STATUSES.includes(lastStatus)) {
+        this.setLastError(RocomClient.taskErrorMessage(data, lastStatus))
+        return null
+      }
+
+      await new Promise(resolve => setTimeout(resolve, intervalMs))
+
+      const task = await this.getIngameTask(ctx, taskId, usedApiKey)
+      if (task.status === null) return null
+
+      if (RocomClient.isCompletedIngamePayload(task.data)) return task.data
+
+      lastStatus = RocomClient.normalizeTaskStatus(task.data?.status)
+
+      if (INGAME_FAILED_STATUSES.includes(lastStatus)) {
+        this.setLastError(RocomClient.taskErrorMessage(task.data, lastStatus))
+        return null
+      }
+
+      // 状态标记完成，但结果可能嵌套在 result/data 中。
+      if (INGAME_COMPLETED_STATUSES.includes(lastStatus)) {
+        if (RocomClient.isCompletedIngamePayload(task.data?.result)) return task.data.result
+        if (RocomClient.isCompletedIngamePayload(task.data?.data)) return task.data.data
+        return task.data
+      }
+
+      // 既无 task_id 也无状态，说明拿到的就是裸结果。
+      if (!RocomClient.extractTaskId(task.data) && !lastStatus) return task.data
+    }
+
+    this.setLastError(labels.stillQueued(taskId))
+    return null
+  }
+
   async qqQrLogin(ctx: Context, userIdentifier: string) {
     const params: any = { client_type: 'bot', client_id: 'koishi', provider: 'rocom' }
     if (userIdentifier) params.user_identifier = this.sanitizeUid(userIdentifier)
@@ -771,33 +889,21 @@ export class RocomClient {
     )
   }
 
-  async ingameHomeInfo(ctx: Context, uid: string, waitMs = 5000) {
+  async ingameHomeInfo(ctx: Context, uid: string, options: IngameTaskPollOptions = {}) {
     const sanitizedUid = this.sanitizeUid(uid)
     if (!sanitizedUid) {
       this.setLastError('UID 不能为空')
       return null
     }
 
+    const waitMs = Number(options.waitMs) || 5000
     const path = '/api/v1/games/rocom/ingame/home/info'
     const payload = { uid: sanitizedUid, wait_ms: waitMs }
-    const { status, data, usedApiKey } = await this.requestIngameWithFallback(ctx, path, payload)
-    if (status === 200 && data && !(data.task_id || data.taskId || data.taskID)) return data
-
-    const taskId = data?.task_id || data?.taskId || data?.taskID
-    if (!taskId) {
-      if (status === 202) this.setLastError('家园查询任务已入队，但未返回 task_id')
-      return null
-    }
-
-    for (let i = 0; i < 10; i++) {
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      const task = await this.getIngameTask(ctx, taskId, usedApiKey)
-      if (task.status === 200) return task.data
-      if (task.status === null) return null
-    }
-
-    this.setLastError(`Home query task is still queued, please retry later (task_id: ${taskId})`)
-    return null
+    const first = await this.requestIngameWithFallback(ctx, path, payload)
+    return this.pollIngameTask(ctx, first, options, {
+      queuedNoTaskId: '家园查询任务已入队，但未返回 task_id',
+      stillQueued: (taskId) => `家园查询任务仍在排队，请稍后重试（task_id: ${taskId}）`,
+    })
   }
 
   async ingameMerchantInfo(ctx: Context, shopId: string | number) {

@@ -915,7 +915,7 @@ function panelPetDetailData(uid: string, pet: PanelPetItem, updatedAtText: strin
 }
 
 async function refreshPanelPets(deps: PluginDeps, uid: string, userId = '') {
-  const res = await deps.client.ingameHomeInfo(deps.ctx, uid, 20000)
+  const res = await deps.client.ingameHomeInfo(deps.ctx, uid, { waitMs: 20000, timeoutMs: 30000 })
   if (res) {
     const homeInfo = homeInfoPayload(res)
     const pets = buildPanelPetList(homeInfo)
@@ -1402,7 +1402,7 @@ async function checkHomeSubscriptions(deps: PluginDeps) {
     if (!sub.uid || !['garden', 'inspiration'].includes(sub.kind)) continue
     checkedCount++
     if (!cache.has(sub.uid)) {
-      cache.set(sub.uid, await deps.client.ingameHomeInfo(deps.ctx, sub.uid))
+      cache.set(sub.uid, await deps.client.ingameHomeInfo(deps.ctx, sub.uid, { timeoutMs: 30000 }))
     }
     const res = cache.get(sub.uid)
     if (!res) continue
@@ -1902,7 +1902,18 @@ export function register(deps: PluginDeps) {
         targetUid = String(binding?.role_id || '')
       }
       if (!targetUid) return '请提供玩家 UID，或先完成绑定后使用 洛克.家园。'
-      const res = await client.ingameHomeInfo(ctx, targetUid)
+
+      let queuedNotified = false
+      const res = await client.ingameHomeInfo(ctx, targetUid, {
+        waitMs: deps.config.homeQueryWaitMs,
+        intervalMs: deps.config.homeQueryPollIntervalMs,
+        timeoutMs: deps.config.homeQueryTimeoutMs,
+        onQueued: async () => {
+          if (queuedNotified) return
+          queuedNotified = true
+          await session?.send?.(`UID ${targetUid} 的家园查询已进入队列，正在等待游戏侧返回，请稍候…`)
+        },
+      })
       if (!res) return `家园查询失败：${client.getLastErrorBrief()}`
       await sendImage(deps, session, 'home', buildHomeRenderData(deps, res, targetUid), `【洛克家园】UID ${targetUid}`)
     })

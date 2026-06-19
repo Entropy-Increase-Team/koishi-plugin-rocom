@@ -19,6 +19,9 @@ export interface PluginConfig {
   merchantCheckTimes: string[]
   homeSubscriptionEnabled: boolean
   homeSubscriptionIntervalMinutes: number
+  homeQueryWaitMs: number
+  homeQueryPollIntervalMs: number
+  homeQueryTimeoutMs: number
   imageCompressionEnabled: boolean
   imageCompressionMinBytes: number
   imageCompressionLevel: number
