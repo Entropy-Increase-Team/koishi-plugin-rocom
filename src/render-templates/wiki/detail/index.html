@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1280, initial-scale=1">
+  <title>{{title}}</title>
+  <link rel="stylesheet" href="{{_res_path}}render/wiki/shared/style.css">
+</head>
+<body class="wiki-body">
+  <div class="wiki-page wiki-detail-page">
+    <div class="wiki-content">
+      <header class="hero">
+        <div>
+          <div class="kicker">ROCOM WIKI</div>
+          <div class="subtitle">{{subtitle}}</div>
+          <h1>{{title}}</h1>
+          {{if summary}}<p class="hero-summary">{{summary}}</p>{{/if}}
+          <div class="badge-row">
+            {{each badges badge}}
+            <span>{{badge}}</span>
+            {{/each}}
+          </div>
+        </div>
+        {{if image}}
+        <div class="hero-image"><img src="{{image}}" alt="{{title}}" onerror="this.parentElement.style.display='none'"></div>
+        {{/if}}
+      </header>
+
+      {{if facts && facts.length}}
+      <div class="facts-grid">
+        {{each facts fact}}
+        <div class="fact"><span>{{fact.label}}</span><strong>{{fact.value}}</strong></div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      {{each sections section}}
+      <section class="panel">
+        <div class="panel-title">{{section.title}} <small>{{section.total}}</small></div>
+        {{if section.cards && section.cards.length}}
+        <div class="card-grid">
+          {{each section.cards card}}
+          <article class="wiki-card">
+            {{if card.image}}
+            <div class="card-image"><img src="{{card.image}}" alt="{{card.title}}" onerror="this.parentElement.style.display='none'"></div>
+            {{/if}}
+            <h2>{{card.title}}</h2>
+            {{if card.summary}}<p>{{card.summary}}</p>{{/if}}
+            {{if card.badges && card.badges.length}}
+            <div class="card-badges">
+              {{each card.badges badge}}
+              <span>{{badge}}</span>
+              {{/each}}
+            </div>
+            {{/if}}
+            {{if card.meta && card.meta.length}}
+            <div class="meta-grid">
+              {{each card.meta row}}
+              <div class="meta-item"><span>{{row.label}}</span><b>{{row.value}}</b></div>
+              {{/each}}
+            </div>
+            {{/if}}
+          </article>
+          {{/each}}
+        </div>
+        {{/if}}
+        {{if section.rows && section.rows.length}}
+        <div class="row-grid">
+          {{each section.rows row}}
+          <div class="row-item"><span class="row-label">{{row.label}}</span><b class="row-value">{{row.value}}</b></div>
+          {{/each}}
+        </div>
+        {{/if}}
+      </section>
+      {{/each}}
+
+      <footer class="footer">
+        <span>{{commandHint}}</span>
+        <span>{{copyright}}</span>
+      </footer>
+    </div>
+  </div>
+</body>
+</html>

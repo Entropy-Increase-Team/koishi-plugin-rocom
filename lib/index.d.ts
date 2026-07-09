@@ -19,9 +19,12 @@ export interface Config {
     merchantCheckTimes: string[];
     homeSubscriptionEnabled: boolean;
     homeSubscriptionIntervalMinutes: number;
+    announcementSubscriptionEnabled: boolean;
+    announcementPollIntervalMinutes: number;
     homeQueryWaitMs: number;
     homeQueryPollIntervalMs: number;
     homeQueryTimeoutMs: number;
+    lowBandwidthMode: boolean;
     imageCompressionEnabled: boolean;
     imageCompressionMinBytes: number;
     imageCompressionLevel: number;

@@ -95,6 +95,10 @@ export declare class RocomClient {
     getEggExchangeEvents(ctx: Context, subscriptionId: string | number, afterEventId?: string, limit?: number, userIdentifier?: string): Promise<any>;
     ingameHomeInfo(ctx: Context, uid: string, options?: IngameTaskPollOptions): Promise<any>;
     ingameMerchantInfo(ctx: Context, shopId: string | number): Promise<any>;
+    ingamePetData(ctx: Context, uid: string, extras?: {
+        petGid?: string | number;
+        npcId?: string | number;
+    }, options?: IngameTaskPollOptions): Promise<any>;
     getFriendship(ctx: Context, fwToken: string, userIds: string, userIdentifier?: string): Promise<any>;
     getStudentState(ctx: Context, fwToken: string, accountType?: number, userIdentifier?: string): Promise<any>;
     getStudentPerks(ctx: Context, fwToken: string, area?: number, accountType?: number, userIdentifier?: string): Promise<any>;
@@ -104,4 +108,19 @@ export declare class RocomClient {
         id?: number;
         name?: string;
     }): Promise<any>;
+    private wikiPagedParams;
+    listWikiPets(ctx: Context, q?: string, pageNo?: number, pageSize?: number, filters?: Record<string, any>): Promise<any>;
+    getWikiPet(ctx: Context, petId: string | number): Promise<any>;
+    getWikiPetProfile(ctx: Context, petId: string | number): Promise<any>;
+    getWikiPetSkills(ctx: Context, petId: string | number): Promise<any>;
+    getWikiPetFamily(ctx: Context, petId: string | number): Promise<any>;
+    getWikiPetHandbook(ctx: Context, petId: string | number): Promise<any>;
+    listWikiSkills(ctx: Context, q?: string, pageNo?: number, pageSize?: number, filters?: Record<string, any>): Promise<any>;
+    getWikiSkill(ctx: Context, skillId: string | number): Promise<any>;
+    getWikiSkillPets(ctx: Context, skillId: string | number): Promise<any>;
+    getWikiCatalogs(ctx: Context): Promise<any>;
+    getWikiOptions(ctx: Context): Promise<any>;
+    getWikiPath(ctx: Context, path: string, params?: Record<string, any>): Promise<any>;
+    listWikiCatalogItems(ctx: Context, path: string, q?: string, pageNo?: number, pageSize?: number, search?: boolean): Promise<any>;
+    get wikiAssetBaseUrl(): string;
 }

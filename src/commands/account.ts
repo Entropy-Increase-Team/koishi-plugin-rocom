@@ -113,6 +113,7 @@ export function register(deps: PluginDeps) {
 
   ctx.command('洛克').subcommand('.QQ登录', 'QQ 扫码登录')
     .alias('洛克QQ登录')
+    .alias('洛克qq登录')
     .action(async ({ session }) => {
       const userId = session!.userId!
       const qrData = await client.qqQrLogin(ctx, userId)

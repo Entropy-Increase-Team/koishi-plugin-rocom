@@ -3,6 +3,11 @@ import { PluginDeps } from '../types'
 import { getPrimaryToken, notLoggedInHint } from './account'
 import { sendImageWithFallback } from '../send-image'
 import { sendScheduledMessage } from '../subscription-send'
+import {
+  buildPetDataRenderData,
+  petDataPetIdsFromPayload,
+  petDataSkillIdsFromPayload,
+} from '../pet-data-service'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -964,7 +969,19 @@ function extractHomePet(deps: PluginDeps, raw: any, index: number, guard = false
   const eggReady = hasEgg || (predictedEggTime > 0 && nowTs >= predictedEggTime)
   const feedRound = Number(homePet.feed_round || raw.feed_round || 0) || 0
   const gender = Number(display.gender || raw.gender || 0) || 0
-  const mutationType = Number(display.mutation_type || raw.mutation_type || homePet.mutation_type || 0) || 0
+  let mutationType = Number(display.mutation_type || raw.mutation_type || homePet.mutation_type || 0) || 0
+  // 上游 v3.4.0：mutation_type 缺失时按 real_speciality_ids 识别变体（103=异色、502=炫彩、两者兼有=异色炫彩）。
+  if (!mutationType) {
+    const specialityValues: any[] = []
+    for (const value of [homePet.real_speciality_ids, raw.real_speciality_ids, homePet.speciality_id, raw.speciality_id]) {
+      if (Array.isArray(value)) specialityValues.push(...value)
+      else if (value !== undefined && value !== null && value !== '') specialityValues.push(value)
+    }
+    const specialityIds = new Set(specialityValues.map(value => String(value).trim()).filter(Boolean))
+    if (specialityIds.has('103') && specialityIds.has('502')) mutationType = 9
+    else if (specialityIds.has('103')) mutationType = 1
+    else if (specialityIds.has('502')) mutationType = 8
+  }
   const isMale = gender === 1
 
   const status = homePet.status ?? raw.status
@@ -1014,6 +1031,9 @@ function extractHomePet(deps: PluginDeps, raw: any, index: number, guard = false
     statusText,
     statusClass,
     note,
+    hasEgg,
+    eggReady,
+    eggTime: predictedEggTime || 0,
     inspireReady: eggReady,
     readyAt: predictedEggTime || 0,
     gender,
@@ -1336,7 +1356,7 @@ function sessionTarget(session: any) {
   }
 }
 
-function homeSubscriptionKey(session: any, uid: string, kind: 'garden' | 'inspiration') {
+function homeSubscriptionKey(session: any, uid: string, kind: 'garden' | 'inspiration' | 'egg') {
   const target = sessionTarget(session)
   return [target.platform, target.channelId || 'private', target.userId || session?.guildId || '', uid, kind].join(':')
 }
@@ -1351,11 +1371,32 @@ async function resolveHomeUid(deps: PluginDeps, session: any, uid = '') {
   return String(deps.userMgr.getPrimaryBinding(session?.userId || '')?.role_id || '')
 }
 
-async function subscribeHome(deps: PluginDeps, session: any, uid: string, kind: 'garden' | 'inspiration') {
+const HOME_SUB_TEXT: Record<'garden' | 'inspiration' | 'egg', { kindText: string, actionText: string, subscribedHint: string, needUidHint: string }> = {
+  garden: {
+    kindText: '菜园作物',
+    actionText: '成熟',
+    subscribedHint: '的家园菜园提醒：首个成熟和全部成熟时各推送一次。',
+    needUidHint: '请提供玩家 UID，或先完成绑定后再订阅家园菜园。',
+  },
+  inspiration: {
+    kindText: '精灵灵感',
+    actionText: '完成',
+    subscribedHint: '的家园精灵灵感提醒：首个完成和全部完成时各推送一次。',
+    needUidHint: '请提供玩家 UID，或先完成绑定后再订阅家园灵感。',
+  },
+  egg: {
+    kindText: '精灵生蛋',
+    actionText: '可领取',
+    subscribedHint: '的家园精灵生蛋提醒：首个可领取和全部可领取时各推送一次。',
+    needUidHint: '请提供玩家 UID，或先完成绑定后再订阅家园生蛋。',
+  },
+}
+
+async function subscribeHome(deps: PluginDeps, session: any, uid: string, kind: 'garden' | 'inspiration' | 'egg') {
   const target = sessionTarget(session)
   if (!target.userId && !isBotAdmin(session, deps.config.adminUserIds)) return '此指令仅限管理员使用。'
   const targetUid = await resolveHomeUid(deps, session, uid)
-  if (!targetUid) return kind === 'garden' ? '请提供玩家 UID，或先完成绑定后再订阅家园菜园。' : '请提供玩家 UID，或先完成绑定后再订阅家园灵感。'
+  if (!targetUid) return HOME_SUB_TEXT[kind].needUidHint
   const key = homeSubscriptionKey(session, targetUid, kind)
   deps.homeSubMgr.upsert(key, {
     key,
@@ -1369,16 +1410,20 @@ async function subscribeHome(deps: PluginDeps, session: any, uid: string, kind: 
     notify_state: {},
     updated_at: Math.floor(Date.now() / 1000),
   })
-  return kind === 'garden'
-    ? `已订阅 UID ${targetUid} 的家园菜园提醒：首个成熟和全部成熟时各推送一次。`
-    : `已订阅 UID ${targetUid} 的家园精灵灵感提醒：首个完成和全部完成时各推送一次。`
+  return `已订阅 UID ${targetUid} ${HOME_SUB_TEXT[kind].subscribedHint}`
 }
 
-function homeSubscriptionState(data: any, kind: 'garden' | 'inspiration') {
+function homeSubscriptionState(data: any, kind: 'garden' | 'inspiration' | 'egg') {
   if (kind === 'garden') {
     const items = data.gardenPlots || []
     const readyItems = items.filter((item: any) => item.ready)
     const names = readyItems.map((item: any) => `田地${item.landIndex} ${item.plantName}`)
+    return { items, readyItems, names }
+  }
+  if (kind === 'egg') {
+    const items = [...(data.indoorPets || []), ...(data.guardPets || [])].filter((item: any) => item.eggTime || item.hasEgg)
+    const readyItems = items.filter((item: any) => item.eggReady)
+    const names = readyItems.map((item: any) => item.name || '未知精灵')
     return { items, readyItems, names }
   }
   const items = [...(data.indoorPets || []), ...(data.guardPets || [])].filter((item: any) => item.readyAt)
@@ -1387,9 +1432,8 @@ function homeSubscriptionState(data: any, kind: 'garden' | 'inspiration') {
   return { items, readyItems, names }
 }
 
-function homeSubscriptionMessage(uid: string, kind: 'garden' | 'inspiration', level: 'first' | 'all', totalCount: number, readyItems: any[], names: string[]) {
-  const kindText = kind === 'garden' ? '菜园作物' : '精灵灵感'
-  const actionText = kind === 'garden' ? '成熟' : '完成'
+function homeSubscriptionMessage(uid: string, kind: 'garden' | 'inspiration' | 'egg', level: 'first' | 'all', totalCount: number, readyItems: any[], names: string[]) {
+  const { kindText, actionText } = HOME_SUB_TEXT[kind]
   const levelText = level === 'first' ? '首个' : '全部'
   return [
     `家园${kindText}${levelText}${actionText}提醒：${uid}`,
@@ -1404,7 +1448,7 @@ async function checkHomeSubscriptions(deps: PluginDeps) {
   let checkedCount = 0
   let pushedCount = 0
   for (const [key, sub] of Object.entries(subs)) {
-    if (!sub.uid || !['garden', 'inspiration'].includes(sub.kind)) continue
+    if (!sub.uid || !['garden', 'inspiration', 'egg'].includes(sub.kind)) continue
     checkedCount++
     if (!cache.has(sub.uid)) {
       cache.set(sub.uid, await deps.client.ingameHomeInfo(deps.ctx, sub.uid, { timeoutMs: 30000 }))
@@ -1923,6 +1967,93 @@ export function register(deps: PluginDeps) {
       await sendImage(deps, session, 'home', buildHomeRenderData(deps, res, targetUid), `【洛克家园】UID ${targetUid}`)
     })
 
+  ctx.command('洛克').subcommand('.家园详情 [uid:string] [petGid:string] [npcId:string]', '查询家园摆放精灵的完整 ingame 数据')
+    .alias('洛克家园详情')
+    .alias('家园详情')
+    .alias('洛克精灵数据')
+    .alias('精灵数据')
+    .action(async ({ session }, uid = '', petGid = '', npcId = '') => {
+      const petGidText = String(petGid || '').trim()
+      const npcIdText = String(npcId || '').trim()
+      if ((petGidText && !npcIdText) || (npcIdText && !petGidText)) {
+        return [
+          '请同时提供 pet_gid 和 npc_id。用法：洛克.家园详情 <UID> 或 洛克.家园详情 <UID> <pet_gid> <npc_id>',
+          '提示：该接口依赖目标玩家在线，npc_id 也可以使用 furniture_guid。',
+        ].join('\n')
+      }
+      let targetUid = String(uid || '').trim()
+      if (!targetUid) {
+        const binding = deps.userMgr.getPrimaryBinding(session!.userId!)
+        targetUid = String(binding?.role_id || '')
+      }
+      if (!targetUid) return '请提供玩家 UID，或先完成绑定后使用 洛克.家园详情。目标玩家需要在线。'
+
+      let queuedNotified = false
+      const res = await client.ingamePetData(ctx, targetUid, { petGid: petGidText, npcId: npcIdText }, {
+        waitMs: 20000,
+        intervalMs: deps.config.homeQueryPollIntervalMs,
+        timeoutMs: deps.config.homeQueryTimeoutMs,
+        onQueued: async () => {
+          if (queuedNotified) return
+          queuedNotified = true
+          await session?.send?.(`UID ${targetUid} 的家园详情查询已进入队列，正在等待游戏侧返回，请稍候…`)
+        },
+      })
+      if (!res) {
+        return [
+          `家园详情查询失败：${client.getLastErrorBrief()}`,
+          '提示：该接口需要目标玩家在线，且目标家园可访问；离线时通常无法获取完整数据。',
+        ].join('\n')
+      }
+
+      const lowBandwidth = Boolean(deps.config.lowBandwidthMode)
+      // Wiki 补全（技能详情/精灵体重范围）；低带宽模式跳过技能图标但仍取技能名。
+      const [optionsPayload, skillLookup, sizeLookup] = await Promise.all([
+        deps.wikiService.getOptionsPayload().catch(() => ({})),
+        (async () => {
+          const lookup: Record<string, any> = {}
+          const ids = petDataSkillIdsFromPayload(res)
+          await Promise.all(ids.map(async (id) => {
+            const detail = await deps.wikiService.getSkillDetailCached(id).catch(() => null)
+            if (detail) lookup[id] = detail
+          }))
+          return lookup
+        })(),
+        (async () => {
+          const lookup: Record<string, any> = {}
+          const ids = petDataPetIdsFromPayload(res)
+          await Promise.all(ids.map(async (id) => {
+            const detail = await deps.wikiService.getPetDetailCached(id).catch(() => null)
+            if (detail) lookup[id] = detail
+          }))
+          return lookup
+        })(),
+      ])
+
+      const data = buildPetDataRenderData(res, targetUid || '当前绑定', {
+        optionsPayload,
+        skillLookup,
+        sizeLookup,
+        singleQuery: Boolean(petGidText && npcIdText),
+        lowBandwidthMode: lowBandwidth,
+        baseUrl: deps.config.apiBaseUrl.replace(/\/$/, ''),
+      })
+
+      const fallbackLines = [
+        `家园详情 - UID ${data.uid}（${data.onlineText}）`,
+        data.notice,
+      ]
+      for (const pet of (data.pets || []).slice(0, 8)) {
+        fallbackLines.push(`${pet.index}. ${pet.name} Lv.${pet.level} #${pet.baseId} ${pet.variantText} 分贝 ${pet.voiceText || '--'}`)
+      }
+      if (!data.pets?.length) fallbackLines.push(data.emptyText)
+      fallbackLines.push('')
+      fallbackLines.push('若服务器带宽过小导致生成超时，请在配置项打开低带宽模式。')
+      fallbackLines.push('低带宽模式开启后，家园详情将不再加载技能图标。')
+
+      await sendImage(deps, session, 'pet-data', data, fallbackLines.join('\n'))
+    })
+
   ctx.command('洛克').subcommand('.刷新面板 [uid:string]', '刷新指定 UID 的精灵面板缓存')
     .alias('洛克刷新面板')
     .alias('刷新面板')
@@ -2032,11 +2163,14 @@ export function register(deps: PluginDeps) {
   ctx.command('订阅家园灵感 [uid:string]', '订阅指定 UID 的家园精灵灵感完成提醒')
     .action(async ({ session }, uid = '') => subscribeHome(deps, session, uid, 'inspiration'))
 
+  ctx.command('订阅家园生蛋 [uid:string]', '订阅指定 UID 的家园精灵生蛋提醒')
+    .action(async ({ session }, uid = '') => subscribeHome(deps, session, uid, 'egg'))
+
   ctx.command('取消订阅家园 [kind:string] [uid:string]', '取消当前会话的家园订阅')
     .action(async ({ session }, kind = '全部', uid = '') => {
       const target = sessionTarget(session)
       if (!target.userId && !isBotAdmin(session, deps.config.adminUserIds)) return '此指令仅限管理员使用。'
-      const kindMap: Record<string, string> = { '菜园': 'garden', '灵感': 'inspiration', '全部': '', all: '', garden: 'garden', inspiration: 'inspiration' }
+      const kindMap: Record<string, string> = { '菜园': 'garden', '灵感': 'inspiration', '生蛋': 'egg', '全部': '', all: '', garden: 'garden', inspiration: 'inspiration', egg: 'egg' }
       const deleted = deps.homeSubMgr.deleteMatching(target, kindMap[String(kind || '全部')] ?? '', String(uid || '').trim())
       return deleted ? `已取消 ${deleted} 条家园订阅。` : '当前会话没有匹配的家园订阅。'
     })

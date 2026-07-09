@@ -641,6 +641,7 @@ export function register(deps: PluginDeps) {
   const { ctx, config, client, merchantSubMgr } = deps
 
   ctx.command(TEXT.merchant, '\u67e5\u770b\u8fdc\u884c\u5546\u4eba\u5546\u54c1')
+    .alias('yxsr')
     .action(async ({ session }) => {
       const res = await client.getMerchantInfo(ctx, true)
       if (!res) return `\u83b7\u53d6\u8fdc\u884c\u5546\u4eba\u6570\u636e\u5931\u8d25\uff1a${client.getLastErrorBrief()}`
@@ -712,6 +713,14 @@ export function register(deps: PluginDeps) {
     })
 
   if (config.merchantSubscriptionEnabled) {
+    // 上游 v3.1.0：检查前加入 ±30s 随机延迟，降低刷新窗口和并发请求冲突。
+    const MERCHANT_JITTER_MS = 30000
+    const runCheckWithJitter = () => {
+      const jitter = Math.floor(Math.random() * MERCHANT_JITTER_MS)
+      setTimeout(() => {
+        checkMerchantSubscriptions(deps).catch(err => logger.warn(`远行商人订阅检查失败: ${err}`))
+      }, jitter)
+    }
     if (config.merchantCheckMode === 'times' && config.merchantCheckTimes.length > 0) {
       let lastMerchantCheckKey = ''
       ctx.setInterval(async () => {
@@ -721,11 +730,11 @@ export function register(deps: PluginDeps) {
         const checkKey = `${now.toDateString()}-${timeStr}`
         if (checkKey === lastMerchantCheckKey) return
         lastMerchantCheckKey = checkKey
-        await checkMerchantSubscriptions(deps)
+        runCheckWithJitter()
       }, 60000)
     } else {
       ctx.setInterval(async () => {
-        await checkMerchantSubscriptions(deps)
+        runCheckWithJitter()
       }, config.merchantCheckInterval)
     }
   }

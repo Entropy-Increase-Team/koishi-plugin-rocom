@@ -275,21 +275,33 @@ export class EggService {
   }
 
   private formatSizeApiCard(item: any) {
-    const probability = num(item?.probability)
+    // 新版 /wiki/pet-size/query 返回 items[].pet / egg_size / match 结构；旧接口是平铺字段。
+    const petInfo = item?.pet && typeof item.pet === 'object' ? item.pet : {}
+    const eggSize = item?.egg_size && typeof item.egg_size === 'object' ? item.egg_size : {}
+    const heightRange = eggSize?.height && typeof eggSize.height === 'object' ? eggSize.height : {}
+    const weightRange = eggSize?.weight && typeof eggSize.weight === 'object' ? eggSize.weight : {}
+    const match = item?.match && typeof item.match === 'object' ? item.match : {}
+
+    const petId = petInfo?.pet_id || item?.petId || item?.pet_id || '-'
+    const petName = petInfo?.name || (typeof item?.pet === 'string' ? item.pet : '') || item?.name || '未知精灵'
+    const typeNames = Array.isArray(petInfo?.type_names) ? petInfo.type_names.filter(Boolean) : []
+    const eggGroupNames = Array.isArray(petInfo?.egg_group_names) ? petInfo.egg_group_names.filter(Boolean) : []
+
+    const probability = num(item?.probability) ?? num(match?.percent)
     const matchCount = num(item?.matchCount)
-    const heightMin = num(item?.diameterMin)
-    const heightMax = num(item?.diameterMax)
-    const weightMin = num(item?.weightMin)
-    const weightMax = num(item?.weightMax)
+    const heightMin = num(heightRange?.min_m ?? item?.diameterMin)
+    const heightMax = num(heightRange?.max_m ?? item?.diameterMax)
+    const weightMin = num(weightRange?.min_kg ?? item?.weightMin)
+    const weightMax = num(weightRange?.max_kg ?? item?.weightMax)
 
     return {
-      id: item?.petId || '-',
-      name: item?.pet || '未知精灵',
-      icon: item?.petIcon || petIconUrl(item?.petId),
-      image: item?.petImage || petImageUrl(item?.petId),
-      type_label: '后端未提供',
+      id: petId,
+      name: petName,
+      icon: petInfo?.icon || item?.petIcon || petIconUrl(petId),
+      image: petInfo?.small_icon || item?.petImage || petImageUrl(petId),
+      type_label: typeNames.length ? typeNames.join(' / ') : '后端未提供',
       egg_group_ids: [],
-      egg_groups_label: '后端未提供',
+      egg_groups_label: eggGroupNames.length ? eggGroupNames.join(' / ') : '后端未提供',
       height_min: heightMin,
       height_max: heightMax,
       height_label: fmtRange(heightMin, heightMax, 'm'),
@@ -298,7 +310,32 @@ export class EggService {
       weight_label: fmtRange(weightMin, weightMax, 'kg'),
       probability,
       match_count: matchCount,
-      match_info_label: this.formatMatchSummary(probability, matchCount),
+      match_info_label: String(match?.match_percent_text || '') || this.formatMatchSummary(probability, matchCount),
+    }
+  }
+
+  // 新版尺寸反查按 match.layer 划分完美/范围匹配。
+  private splitNewSizeApiItems(items: any[]): [any[], any[]] {
+    const perfect: any[] = []
+    const ranged: any[] = []
+    for (const item of items) {
+      const match = item?.match && typeof item.match === 'object' ? item.match : {}
+      const layer = String(match?.layer || '').toLowerCase()
+      const displayOnly = Boolean(match?.display_only)
+      if (['strict', 'exact'].includes(layer) && !displayOnly) perfect.push(item)
+      else ranged.push(item)
+    }
+    return [perfect, ranged]
+  }
+
+  private sizeApiResultGroups(results: any): { exact: any[]; candidates: any[] } {
+    if (Array.isArray(results?.items)) {
+      const [perfect, ranged] = this.splitNewSizeApiItems(results.items)
+      return { exact: perfect, candidates: ranged }
+    }
+    return {
+      exact: Array.isArray(results?.exactResults) ? results.exactResults : [],
+      candidates: Array.isArray(results?.candidates) ? results.candidates : [],
     }
   }
 
@@ -480,8 +517,7 @@ export class EggService {
     if (height != null) cond.push(`身高=${heightDisplay || fmtRange(ht(height), ht(height), 'm')}`)
     if (weight != null) cond.push(`体重=${weight}kg`)
     const condStr = cond.join(' + ') || '当前条件'
-    const exact = results?.exactResults || []
-    const candidates = results?.candidates || []
+    const { exact, candidates } = this.sizeApiResultGroups(results)
     if (!exact.length && !candidates.length) return `❌ 未找到符合 ${condStr} 的精灵。`
     const lines: string[] = []
     if (exact.length) {
@@ -698,9 +734,10 @@ export class EggService {
     const conditions: string[] = []
     if (height != null) conditions.push(`身高 ${heightDisplay || fmtRange(ht(height), ht(height), 'm')}`)
     if (weight != null) conditions.push(`体重 ${weight} kg`)
+    const groups = this.sizeApiResultGroups(results)
     const [perfect, ranged] = this.mergeCardsByName(
-      (results?.exactResults || []).map((item: any) => this.formatSizeApiCard(item)),
-      (results?.candidates || []).map((item: any) => this.formatSizeApiCard(item)),
+      groups.exact.map((item: any) => this.formatSizeApiCard(item)),
+      groups.candidates.map((item: any) => this.formatSizeApiCard(item)),
     )
     const searchMode = results?.searchMode || ''
     const queryLabel = `${conditions.join(' / ') || '尺寸反查'}${searchMode ? ` · 模式 ${searchMode}` : ''}`

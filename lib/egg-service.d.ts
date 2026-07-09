@@ -27,6 +27,8 @@ export declare class EggService {
     private rangeMatchScore;
     private formatPetCard;
     private formatSizeApiCard;
+    private splitNewSizeApiItems;
+    private sizeApiResultGroups;
     private formatEggSearchCard;
     private formatEggSearchTextLine;
     private mergeCardsByName;

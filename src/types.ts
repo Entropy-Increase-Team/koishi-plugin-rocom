@@ -1,8 +1,10 @@
 import { Context } from 'koishi'
 import { RocomClient } from './client'
-import { UserManager, MerchantSubscriptionManager, HomeSubscriptionManager } from './user'
+import { UserManager, MerchantSubscriptionManager, HomeSubscriptionManager, AnnouncementSubscriptionManager } from './user'
 import { EggService } from './egg-service'
 import { Renderer } from './render'
+import { WikiService } from './wiki-service'
+import { AtlasService } from './atlas-service'
 
 export interface PluginConfig {
   apiBaseUrl: string
@@ -20,9 +22,12 @@ export interface PluginConfig {
   merchantCheckTimes: string[]
   homeSubscriptionEnabled: boolean
   homeSubscriptionIntervalMinutes: number
+  announcementSubscriptionEnabled: boolean
+  announcementPollIntervalMinutes: number
   homeQueryWaitMs: number
   homeQueryPollIntervalMs: number
   homeQueryTimeoutMs: number
+  lowBandwidthMode: boolean
   imageCompressionEnabled: boolean
   imageCompressionMinBytes: number
   imageCompressionLevel: number
@@ -35,6 +40,9 @@ export interface PluginDeps {
   userMgr: UserManager
   merchantSubMgr: MerchantSubscriptionManager
   homeSubMgr: HomeSubscriptionManager
+  announcementSubMgr: AnnouncementSubscriptionManager
   eggService: EggService
   renderer: Renderer
+  wikiService: WikiService
+  atlasService: AtlasService
 }

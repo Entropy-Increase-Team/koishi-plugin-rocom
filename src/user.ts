@@ -29,7 +29,7 @@ export interface MerchantSubscription {
 
 export interface HomeSubscription {
   key: string
-  kind: 'garden' | 'inspiration'
+  kind: 'garden' | 'inspiration' | 'egg'
   uid: string
   channel_id?: string
   platform?: string
@@ -220,6 +220,51 @@ export class HomeSubscriptionManager {
   }
 
   getAll(): Record<string, HomeSubscription> {
+    return JSON.parse(JSON.stringify(this.store.get()))
+  }
+}
+
+export interface AnnouncementSubscription {
+  key: string
+  platform?: string
+  channel_id?: string
+  guild_id?: string
+  user_id?: string
+  updated_by: string
+  last_id?: string
+  since_ts?: number
+  updated_at: number
+}
+
+export class AnnouncementSubscriptionManager {
+  private store: JsonStore<Record<string, AnnouncementSubscription>>
+
+  constructor(dataDir: string) {
+    this.store = new JsonStore(dataDir, 'rocom_announcement_subscriptions.json', {})
+  }
+
+  upsert(key: string, sub: AnnouncementSubscription) {
+    const data = this.store.get()
+    data[key] = { ...sub }
+    this.store.set(data)
+  }
+
+  deleteMatching(target: { platform?: string, channelId?: string, userId?: string }) {
+    const data = this.store.get()
+    let deleted = 0
+    for (const [key, sub] of Object.entries(data)) {
+      const sameTarget = sub.platform === target.platform
+        && (sub.channel_id || '') === (target.channelId || '')
+        && (sub.user_id || '') === (target.userId || '')
+      if (!sameTarget) continue
+      delete data[key]
+      deleted++
+    }
+    if (deleted) this.store.set(data)
+    return deleted
+  }
+
+  getAll(): Record<string, AnnouncementSubscription> {
     return JSON.parse(JSON.stringify(this.store.get()))
   }
 }

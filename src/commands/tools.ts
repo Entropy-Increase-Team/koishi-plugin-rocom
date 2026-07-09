@@ -2,6 +2,7 @@ import { Logger } from 'koishi'
 import { PluginDeps } from '../types'
 import { ActivitiesService } from '../activities-service'
 import { sendImageWithFallback } from '../send-image'
+import { sendScheduledMessage } from '../subscription-send'
 
 const logger = new Logger('rocom-tools')
 const activitiesService = new ActivitiesService()
@@ -52,6 +53,66 @@ function firstArray(payload: any, keys: string[]): any[] {
 
 function announcementId(item: any): string {
   return trimText(item?.thread_id || item?.id)
+}
+
+function announcementTimestamp(item: any): number {
+  for (const key of ['published_at_ts', 'publish_at_ts', 'created_at_ts']) {
+    const value = Number(item?.[key])
+    if (Number.isFinite(value) && value > 0) return value
+  }
+  for (const key of ['publishAt', 'published_at', 'createdAt']) {
+    const text = trimText(item?.[key])
+    if (!text) continue
+    const date = new Date(text)
+    if (!Number.isNaN(date.getTime())) return Math.floor(date.getTime() / 1000)
+  }
+  return 0
+}
+
+function announcementSubscriptionKey(session: any): string {
+  const privateChat = !session?.guildId
+  return [session?.platform || '', session?.channelId || 'private', privateChat ? (session?.userId || '') : '', 'announcement'].join(':')
+}
+
+// 上游 v3.2.0：轮询最新公告，向订阅会话推送新公告提醒。
+async function checkAnnouncementSubscriptions(deps: PluginDeps) {
+  const { ctx, client, announcementSubMgr } = deps
+  const subs = announcementSubMgr.getAll()
+  const subEntries = Object.entries(subs)
+  if (!subEntries.length) return { subscriptions: 0, pushed: 0 }
+
+  const latest = await client.getLatestAnnouncement(ctx, { category_id: 99 })
+  const item = latest?.detail || latest?.announcement || latest
+  const latestId = announcementId(item)
+  if (!latestId) return { subscriptions: subEntries.length, pushed: 0 }
+  const latestTs = announcementTimestamp(item)
+
+  let pushed = 0
+  for (const [key, sub] of subEntries) {
+    if (latestId === String(sub.last_id || '')) continue
+    if (latestTs && sub.since_ts && latestTs <= sub.since_ts) continue
+    const message = [`【洛克王国新公告】`, buildAnnouncementDetailText(latest)].join('\n')
+    try {
+      const sent = await sendScheduledMessage(ctx, {
+        platform: sub.platform,
+        channelId: sub.channel_id || sub.guild_id || sub.user_id || '',
+        guildId: sub.guild_id || '',
+        userId: sub.user_id || '',
+      }, message)
+      if (!sent) continue
+    } catch (e) {
+      logger.warn(`公告订阅推送失败: ${e}`)
+      continue
+    }
+    pushed++
+    announcementSubMgr.upsert(key, {
+      ...sub,
+      last_id: latestId,
+      since_ts: latestTs || Math.floor(Date.now() / 1000),
+      updated_at: Math.floor(Date.now() / 1000),
+    })
+  }
+  return { subscriptions: subEntries.length, pushed }
 }
 
 function buildAnnouncementListText(data: any, page: number): string {
@@ -147,6 +208,46 @@ export function register(deps: PluginDeps) {
       if (!data) return `公告详情查询失败：${client.getLastErrorBrief()}`
       return buildAnnouncementDetailText(data)
     })
+
+  ctx.command('订阅洛克公告', '订阅洛克王国新公告推送')
+    .action(async ({ session }) => {
+      const privateChat = !session?.guildId
+      if (!privateChat && !config.adminUserIds.includes(session?.userId || '')) return '此指令仅限管理员使用。'
+      const key = announcementSubscriptionKey(session)
+      // 以当前最新公告为基线，只推送之后的新公告。
+      const latest = await client.getLatestAnnouncement(ctx, { category_id: 99 }, session?.userId || '')
+      const item = latest?.detail || latest?.announcement || latest
+      deps.announcementSubMgr.upsert(key, {
+        key,
+        platform: session?.platform || '',
+        channel_id: session?.channelId || '',
+        guild_id: session?.guildId || '',
+        user_id: privateChat ? (session?.userId || '') : '',
+        updated_by: session?.userId || '',
+        last_id: announcementId(item),
+        since_ts: announcementTimestamp(item) || Math.floor(Date.now() / 1000),
+        updated_at: Math.floor(Date.now() / 1000),
+      })
+      return '已订阅洛克王国新公告推送，检测到新公告时会在当前会话提醒。'
+    })
+
+  ctx.command('取消订阅洛克公告', '取消洛克王国新公告推送')
+    .action(async ({ session }) => {
+      const privateChat = !session?.guildId
+      if (!privateChat && !config.adminUserIds.includes(session?.userId || '')) return '此指令仅限管理员使用。'
+      const deleted = deps.announcementSubMgr.deleteMatching({
+        platform: session?.platform || '',
+        channelId: session?.channelId || '',
+        userId: privateChat ? (session?.userId || '') : '',
+      })
+      return deleted ? '已取消洛克公告订阅。' : '当前会话没有洛克公告订阅。'
+    })
+
+  if (config.announcementSubscriptionEnabled) {
+    ctx.setInterval(() => {
+      checkAnnouncementSubscriptions(deps).catch(err => logger.warn(`公告订阅检查失败: ${err}`))
+    }, Math.max(1, config.announcementPollIntervalMinutes || 10) * 60000)
+  }
 
   ctx.command('洛克').subcommand('.同步配置', '手动同步 RoCom 远端配置')
     .alias('洛克同步配置')

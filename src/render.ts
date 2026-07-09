@@ -134,13 +134,17 @@ export class Renderer {
         try {
           await page.evaluate(async () => {
             const images = Array.from(document.images)
-            await Promise.all(images.map((img) => {
-              if (img.complete) return Promise.resolve()
-              return new Promise<void>((resolve) => {
-                img.onload = () => resolve()
-                img.onerror = () => resolve()
-              })
-            }))
+            // 限制远程图片等待时间，避免慢速资源拖垮整次渲染（对应上游 v3.7.1）。
+            await Promise.race([
+              Promise.all(images.map((img) => {
+                if (img.complete) return Promise.resolve()
+                return new Promise<void>((resolve) => {
+                  img.onload = () => resolve()
+                  img.onerror = () => resolve()
+                })
+              })),
+              new Promise<void>(resolve => setTimeout(resolve, 10000)),
+            ])
 
             const fonts = (document as any).fonts
             if (fonts?.ready) {
@@ -160,6 +164,8 @@ export class Renderer {
           '.searcheggs-cont',
           '.bwiki-shell',
           '.skill-shell',
+          '.wiki-page',
+          '.pet-data-page',
           '.lineup-page',
           '.lineup-detail-page',
           '.page-section-main',
@@ -210,6 +216,29 @@ export class Renderer {
               deviceScaleFactor: initialViewport.deviceScaleFactor,
             })
             await new Promise(resolve => setTimeout(resolve, 100))
+
+            // 居中（margin auto）模板在视口调整后 x/y 会变化，截图前需要重新测量，
+            // 否则 clip 会带着旧偏移导致画面左侧被截断（对应上游 v3.7.5 修复）。
+            try {
+              const remeasured = await page.evaluate((el: Element, visualBounds: boolean) => {
+                const rect = el.getBoundingClientRect()
+                const element = el as HTMLElement
+                return {
+                  x: rect.left + window.scrollX,
+                  y: rect.top + window.scrollY,
+                  width: visualBounds ? rect.width : Math.max(rect.width, element.scrollWidth, element.offsetWidth),
+                  height: visualBounds ? rect.height : Math.max(rect.height, element.scrollHeight, element.offsetHeight),
+                }
+              }, target, useVisualBounds)
+              if (remeasured && remeasured.width > 0 && remeasured.height > 0) {
+                elementMetrics.x = remeasured.x
+                elementMetrics.y = remeasured.y
+                elementMetrics.width = remeasured.width
+                elementMetrics.height = remeasured.height
+              }
+            } catch (err) {
+              logger.warn(`element remeasure failed for ${templateName}: ${err}`)
+            }
 
             const hasOverflow =
               elementMetrics.width > box.width + 0.5 ||

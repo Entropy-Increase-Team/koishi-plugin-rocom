@@ -417,12 +417,15 @@ export class RocomClient {
   }
 
   // 判断一份 payload 是否为“已完成的业务结果”（而非排队占位）。
-  // 家园接口完成时返回 rows/home_info；玩家、商店完成时返回 source/title/rows。
+  // 家园接口完成时返回 rows/home_info；玩家、商店完成时返回 source/title/rows；
+  // 家园详情（pet/data）完成时返回 npc_pets/npc_pet。
   private static isCompletedGatewayPayload(payload: any): boolean {
     if (!payload || typeof payload !== 'object') return false
     if (Array.isArray(payload.rows)) return true
     if (payload.home_info !== undefined) return true
     if (payload.source !== undefined) return true
+    if (Array.isArray(payload.npc_pets)) return true
+    if (payload.npc_pet && typeof payload.npc_pet === 'object') return true
     if (String(payload.title || '').trim()) return true
     return false
   }
@@ -703,6 +706,24 @@ export class RocomClient {
   }
 
   async queryPetSize(ctx: Context, diameter: number, weight: number, sameRideEgg = false, userIdentifier = '') {
+    // 新版蛋尺寸反查：/wiki/pet-size/query（items[].pet/egg_size/match 结构），失败时回退旧接口。
+    const newParams: any = this.scopedParams({
+      diameter,
+      weight,
+      pool: sameRideEgg ? 'ride' : 'magic',
+      include_display_only: 'false',
+      page_no: 1,
+      page_size: 30,
+    }, userIdentifier)
+    const newRes = await this.get(
+      ctx,
+      '/api/v1/games/rocom/wiki/pet-size/query',
+      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
+      newParams,
+      { silentFailureDetails: true },
+    )
+    if (newRes && Array.isArray(newRes.items)) return newRes
+
     const params: any = this.scopedParams({ diameter, weight }, userIdentifier)
     if (sameRideEgg) params.sameRideEgg = 1
     return this.get(ctx, '/api/v1/games/rocom/pet/size-query', this.wegameHeaders('', userIdentifier, 'bot', 'koishi'), params)
@@ -932,6 +953,33 @@ export class RocomClient {
     return status === null ? null : data
   }
 
+  // 家园详情：批量或单只查询家园摆放精灵的完整 ingame 数据（上游 v3.6.1）。
+  // UID 参数名为 target_uin；单只查询需同时提供 pet_gid 和 npc_id。
+  async ingamePetData(
+    ctx: Context,
+    uid: string,
+    extras: { petGid?: string | number, npcId?: string | number } = {},
+    options: IngameTaskPollOptions = {},
+  ) {
+    const sanitizedUid = this.sanitizeUid(uid)
+    if (!sanitizedUid) {
+      this.setLastError('UID 不能为空')
+      return null
+    }
+
+    const waitMs = Number(options.waitMs) || 20000
+    const payload: Record<string, any> = { target_uin: sanitizedUid, wait_ms: waitMs }
+    if (extras.petGid !== undefined && extras.petGid !== null && String(extras.petGid) !== '') payload.pet_gid = extras.petGid
+    if (extras.npcId !== undefined && extras.npcId !== null && String(extras.npcId) !== '') payload.npc_id = extras.npcId
+
+    const path = '/api/v1/games/rocom/ingame/pet/data'
+    const first = await this.requestIngameWithFallback(ctx, path, payload)
+    return this.pollIngameTask(ctx, first, options, {
+      queuedNoTaskId: '家园详情任务已入队，但未返回 task_id',
+      stillQueued: (taskId) => `家园详情任务仍在排队，请稍后重试（task_id: ${taskId}）`,
+    })
+  }
+
   async getFriendship(ctx: Context, fwToken: string, userIds: string, userIdentifier = '') {
     return this.get(
       ctx,
@@ -967,5 +1015,81 @@ export class RocomClient {
     if (options.id !== undefined) params.id = options.id
     if (options.name) params.name = options.name
     return this.get(ctx, '/api/v1/games/rocom/pet/detail', this.wegameHeaders(), params)
+  }
+
+  // ===== 新版 RoCom Wiki API（上游 v3.6.0）=====
+
+  private wikiPagedParams(q = '', pageNo = 1, pageSize = 10, filters: Record<string, any> = {}) {
+    const params: Record<string, any> = {
+      page_no: Math.max(Number(pageNo) || 1, 1),
+      page_size: Math.min(Math.max(Number(pageSize) || 10, 1), 100),
+    }
+    if (q) params.q = q
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined && value !== null && value !== '') params[key] = value
+    }
+    return params
+  }
+
+  async listWikiPets(ctx: Context, q = '', pageNo = 1, pageSize = 10, filters: Record<string, any> = {}) {
+    return this.get(ctx, '/api/v1/games/rocom/wiki/pets', this.wegameHeaders(), this.wikiPagedParams(q, pageNo, pageSize, filters))
+  }
+
+  async getWikiPet(ctx: Context, petId: string | number) {
+    return this.get(ctx, `/api/v1/games/rocom/wiki/pets/${petId}`, this.wegameHeaders())
+  }
+
+  async getWikiPetProfile(ctx: Context, petId: string | number) {
+    return this.get(ctx, `/api/v1/games/rocom/wiki/pets/${petId}/profile`, this.wegameHeaders(), undefined, { silentFailureDetails: true })
+  }
+
+  async getWikiPetSkills(ctx: Context, petId: string | number) {
+    return this.get(ctx, `/api/v1/games/rocom/wiki/pets/${petId}/skills`, this.wegameHeaders(), undefined, { silentFailureDetails: true })
+  }
+
+  async getWikiPetFamily(ctx: Context, petId: string | number) {
+    return this.get(ctx, `/api/v1/games/rocom/wiki/pets/${petId}/family`, this.wegameHeaders(), undefined, { silentFailureDetails: true })
+  }
+
+  async getWikiPetHandbook(ctx: Context, petId: string | number) {
+    return this.get(ctx, `/api/v1/games/rocom/wiki/pets/${petId}/handbook`, this.wegameHeaders(), undefined, { silentFailureDetails: true })
+  }
+
+  async listWikiSkills(ctx: Context, q = '', pageNo = 1, pageSize = 10, filters: Record<string, any> = {}) {
+    return this.get(ctx, '/api/v1/games/rocom/wiki/skills', this.wegameHeaders(), this.wikiPagedParams(q, pageNo, pageSize, filters))
+  }
+
+  async getWikiSkill(ctx: Context, skillId: string | number) {
+    return this.get(ctx, `/api/v1/games/rocom/wiki/skills/${skillId}`, this.wegameHeaders(), undefined, { silentFailureDetails: true })
+  }
+
+  async getWikiSkillPets(ctx: Context, skillId: string | number) {
+    return this.get(ctx, `/api/v1/games/rocom/wiki/skills/${skillId}/pets`, this.wegameHeaders(), undefined, { silentFailureDetails: true })
+  }
+
+  async getWikiCatalogs(ctx: Context) {
+    return this.get(ctx, '/api/v1/games/rocom/wiki/catalogs', this.wegameHeaders())
+  }
+
+  async getWikiOptions(ctx: Context) {
+    return this.get(ctx, '/api/v1/games/rocom/wiki/options', this.wegameHeaders(), undefined, { silentFailureDetails: true })
+  }
+
+  async getWikiPath(ctx: Context, path: string, params: Record<string, any> = {}) {
+    const trimmed = String(path || '').trim()
+    if (!trimmed.startsWith('/api/v1/games/rocom/wiki/')) {
+      this.setLastError('非法 Wiki 路径')
+      return null
+    }
+    return this.get(ctx, trimmed, this.wegameHeaders(), params)
+  }
+
+  async listWikiCatalogItems(ctx: Context, path: string, q = '', pageNo = 1, pageSize = 10, search = true) {
+    const params = this.wikiPagedParams(search ? q : '', pageNo, pageSize)
+    return this.getWikiPath(ctx, path, params)
+  }
+
+  get wikiAssetBaseUrl() {
+    return this.baseUrl
   }
 }

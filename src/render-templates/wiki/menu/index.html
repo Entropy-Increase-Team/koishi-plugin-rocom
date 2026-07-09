@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1280, initial-scale=1">
+  <title>{{title}}</title>
+  <link rel="stylesheet" href="{{_res_path}}render/wiki/shared/style.css">
+</head>
+<body class="wiki-body">
+  <div class="wiki-page wiki-menu-page">
+    <div class="wiki-content">
+      <header class="hero">
+        <div>
+          <div class="kicker">ROCOM WIKI</div>
+          <div class="subtitle">{{subtitle}}</div>
+          <h1>{{title}}</h1>
+          {{if summary}}
+          <p class="hero-summary">{{summary}}</p>
+          {{/if}}
+          {{if badges && badges.length}}
+          <div class="badge-row">
+            {{each badges badge}}
+            <span>{{badge}}</span>
+            {{/each}}
+          </div>
+          {{/if}}
+        </div>
+      </header>
+
+      {{if facts && facts.length}}
+      <div class="facts-grid">
+        {{each facts fact}}
+        <div class="fact"><span>{{fact.label}}</span><strong>{{fact.value}}</strong></div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      {{each groups group}}
+      <section class="topic-group panel">
+        <div class="group-header">
+          <div class="panel-title">{{group.title}} <small>{{group.total}}</small></div>
+          {{if group.desc}}
+          <div class="group-desc">{{group.desc}}</div>
+          {{/if}}
+        </div>
+        <div class="category-grid">
+          {{each group.items item}}
+          <article class="category-card">
+            <h2>{{item.title}}</h2>
+            <div class="category-command">{{item.summary}}</div>
+            <div class="category-children">{{item.children}}</div>
+          </article>
+          {{/each}}
+        </div>
+      </section>
+      {{/each}}
+
+      <footer class="footer">
+        <span>{{commandHint}}</span>
+        <span>{{copyright}}</span>
+      </footer>
+    </div>
+  </div>
+</body>
+</html>

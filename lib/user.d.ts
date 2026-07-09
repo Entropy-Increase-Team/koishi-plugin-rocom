@@ -21,7 +21,7 @@ export interface MerchantSubscription {
 }
 export interface HomeSubscription {
     key: string;
-    kind: 'garden' | 'inspiration';
+    kind: 'garden' | 'inspiration' | 'egg';
     uid: string;
     channel_id?: string;
     platform?: string;
@@ -65,4 +65,26 @@ export declare class HomeSubscriptionManager {
         userId?: string;
     }, kind?: string, uid?: string): number;
     getAll(): Record<string, HomeSubscription>;
+}
+export interface AnnouncementSubscription {
+    key: string;
+    platform?: string;
+    channel_id?: string;
+    guild_id?: string;
+    user_id?: string;
+    updated_by: string;
+    last_id?: string;
+    since_ts?: number;
+    updated_at: number;
+}
+export declare class AnnouncementSubscriptionManager {
+    private store;
+    constructor(dataDir: string);
+    upsert(key: string, sub: AnnouncementSubscription): void;
+    deleteMatching(target: {
+        platform?: string;
+        channelId?: string;
+        userId?: string;
+    }): number;
+    getAll(): Record<string, AnnouncementSubscription>;
 }

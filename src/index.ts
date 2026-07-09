@@ -3,9 +3,11 @@ import fs from 'node:fs'
 import { } from 'koishi-plugin-puppeteer'
 import path from 'node:path'
 import { RocomClient } from './client'
-import { UserManager, MerchantSubscriptionManager, HomeSubscriptionManager } from './user'
+import { UserManager, MerchantSubscriptionManager, HomeSubscriptionManager, AnnouncementSubscriptionManager } from './user'
 import { EggService } from './egg-service'
 import { Renderer } from './render'
+import { WikiService } from './wiki-service'
+import { AtlasService } from './atlas-service'
 import { PluginDeps } from './types'
 import {
   migrateLegacyFrameworkTokens,
@@ -64,6 +66,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { cmd: '洛克.交换大厅', desc: '查看交换大厅' },
       { cmd: '洛克.玩家', desc: '查询 ingame 玩家资料' },
       { cmd: '洛克.家园', desc: '查询家园菜园' },
+      { cmd: '洛克.家园详情', desc: '家园精灵完整数据' },
       { cmd: '洛克.商店', desc: '查询 ingame 商店' },
       { cmd: '洛克.日历', desc: '查看活动日历' },
       { cmd: '洛克.公告', desc: '查看公告列表' },
@@ -79,14 +82,19 @@ const MENU_GROUPS: MenuGroup[] = [
       { cmd: '取消订阅远行商人', desc: '取消商人提醒' },
       { cmd: '订阅家园菜园', desc: '菜园成熟提醒' },
       { cmd: '订阅家园灵感', desc: '精灵灵感提醒' },
+      { cmd: '订阅家园生蛋', desc: '精灵生蛋提醒' },
       { cmd: '取消订阅家园', desc: '取消家园订阅' },
+      { cmd: '订阅洛克公告', desc: '新公告推送提醒' },
+      { cmd: '取消订阅洛克公告', desc: '取消公告订阅' },
     ],
   },
   {
     groupTitle: '百科与查蛋',
     menuItems: [
-      { cmd: '洛克.wiki', desc: '精灵 Wiki 查询' },
+      { cmd: '洛克.wiki', desc: 'Wiki 全局/分类查询' },
       { cmd: '洛克.技能', desc: '技能 Wiki 查询' },
+      { cmd: '精灵图鉴', desc: '本地图鉴查图' },
+      { cmd: '图鉴下载', desc: '下载图鉴缓存(管理员)' },
       { cmd: '洛克.查蛋', desc: '精灵查蛋 / 尺寸反查' },
       { cmd: '洛克.配种', desc: '配种查询' },
     ],
@@ -129,9 +137,12 @@ export interface Config {
   merchantCheckTimes: string[]
   homeSubscriptionEnabled: boolean
   homeSubscriptionIntervalMinutes: number
+  announcementSubscriptionEnabled: boolean
+  announcementPollIntervalMinutes: number
   homeQueryWaitMs: number
   homeQueryPollIntervalMs: number
   homeQueryTimeoutMs: number
+  lowBandwidthMode: boolean
   imageCompressionEnabled: boolean
   imageCompressionMinBytes: number
   imageCompressionLevel: number
@@ -161,11 +172,14 @@ export const Config: Schema<Config> = Schema.intersect([
     merchantPrivateSubscriptionEnabled: Schema.boolean().default(true).description('允许个人私聊订阅远行商人推送'),
     homeSubscriptionEnabled: Schema.boolean().default(true).description('启用家园菜园和灵感订阅推送'),
     homeSubscriptionIntervalMinutes: Schema.number().default(5).description('家园订阅检查间隔，单位分钟'),
+    announcementSubscriptionEnabled: Schema.boolean().default(true).description('启用洛克公告订阅推送'),
+    announcementPollIntervalMinutes: Schema.number().default(10).description('公告订阅检查间隔，单位分钟'),
   }).description('订阅推送设置'),
   Schema.object({
     homeQueryWaitMs: Schema.number().default(5000).description('家园查询服务端同步等待毫秒（long-poll，超过此时间未出结果则转入排队）'),
     homeQueryPollIntervalMs: Schema.number().default(3000).description('家园查询进入排队后的轮询间隔，单位毫秒'),
     homeQueryTimeoutMs: Schema.number().default(180000).description('家园查询排队等候的总超时，单位毫秒，超时后提示稍后重试'),
+    lowBandwidthMode: Schema.boolean().default(false).description('低带宽模式：家园详情不再加载技能图标，降低长图生成压力'),
   }).description('家园查询排队设置'),
 ])
 
@@ -176,6 +190,7 @@ export function apply(ctx: Context, config: Config) {
   const userMgr = new UserManager(dataDir)
   const merchantSubMgr = new MerchantSubscriptionManager(dataDir)
   const homeSubMgr = new HomeSubscriptionManager(dataDir)
+  const announcementSubMgr = new AnnouncementSubscriptionManager(dataDir)
   const resPath = path.resolve(__dirname, '..')
   const renderer = new Renderer(resPath)
   const renderTemplateRoot = fs.existsSync(path.join(resPath, 'lib', 'render-templates'))
@@ -183,8 +198,10 @@ export function apply(ctx: Context, config: Config) {
     : path.join(resPath, 'src', 'render-templates')
   const searcheggsDir = path.join(renderTemplateRoot, 'searcheggs')
   const eggService = new EggService(searcheggsDir)
+  const wikiService = new WikiService(ctx, client)
+  const atlasService = new AtlasService(dataDir)
 
-  const deps: PluginDeps = { ctx, config, client, userMgr, merchantSubMgr, homeSubMgr, eggService, renderer }
+  const deps: PluginDeps = { ctx, config, client, userMgr, merchantSubMgr, homeSubMgr, announcementSubMgr, eggService, renderer, wikiService, atlasService }
 
   ctx.on('ready', () => {
     migrateRoleTokensToUserId(ctx).catch((err) => {
