@@ -2,10 +2,9 @@
 
 # koishi-plugin-rocom
 
-<img width="150" height="150" alt="image" src="https://github.com/user-attachments/assets/cdd7655e-08db-4db2-becc-5a2ace6c744b" />
+<img width="200" height="200" alt="image" src="https://github.com/Entropy-Increase-Team/astrbot_plugin_rocom/blob/master/logo.png" />
 
 **交流反馈群：1097809141**  
-**注意，本项目仍处于开发调试期，可能会有未知BUG的产生。**
 
 ---
 
