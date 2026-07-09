@@ -337,7 +337,15 @@ export class AtlasService {
       if (progressCb) await progressCb(Math.max(0, Math.min(100, Math.round(percent))), stage)
     }
 
-    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rocom_atlas_'))
+    // 清理上次崩溃或中断留下的临时目录。
+    fs.mkdirSync(this.dataDir, { recursive: true })
+    for (const entry of fs.readdirSync(this.dataDir, { withFileTypes: true })) {
+      if (entry.isDirectory() && entry.name.startsWith('.atlas_tmp_')) {
+        cleanupTempDir(path.join(this.dataDir, entry.name))
+      }
+    }
+    // 临时目录放在数据目录同盘，确保 renameSync 原子操作不跨文件系统（避免 EXDEV）。
+    const tmpRoot = fs.mkdtempSync(path.join(this.dataDir, '.atlas_tmp_'))
     const extractDir = path.join(tmpRoot, 'extract')
     let preparedDir = path.join(tmpRoot, 'rocom_atlas')
     const cloneDir = path.join(tmpRoot, 'clone')
