@@ -2,7 +2,12 @@ import { Context } from 'koishi';
 export type AtlasProgressCallback = (percent: number, stage: string) => void | Promise<void>;
 export declare class AtlasService {
     private dataDir;
-    constructor(dataDir: string);
+    private zipUrls;
+    private gitUrl;
+    constructor(dataDir: string, options?: {
+        zipUrls?: string[];
+        gitUrl?: string;
+    });
     get atlasDir(): string;
     private indexPath;
     private petsDir;

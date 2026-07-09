@@ -8,11 +8,11 @@ import { normalizeQueryText } from './wiki-service'
 
 const logger = new Logger('rocom-atlas')
 
-const ATLAS_ZIP_URLS = [
+const DEFAULT_ATLAS_ZIP_URLS = [
   'https://codeload.github.com/Entropy-Increase-Team/Rocom-Atlas/zip/refs/heads/main',
   'https://github.com/Entropy-Increase-Team/Rocom-Atlas/archive/refs/heads/main.zip',
 ]
-const ATLAS_GIT_URL = 'https://github.com/Entropy-Increase-Team/Rocom-Atlas.git'
+const DEFAULT_ATLAS_GIT_URL = 'https://github.com/Entropy-Increase-Team/Rocom-Atlas.git'
 
 // ===== 最小 ZIP 解包（stored + deflate），避免引入额外依赖 =====
 
@@ -69,12 +69,12 @@ function extractZip(buffer: Buffer, destDir: string) {
   }
 }
 
-function gitClone(dst: string): Promise<void> {
+function gitClone(dst: string, gitUrl: string): Promise<void> {
   return new Promise((resolve, reject) => {
     // --progress 让 git 在非 TTY 下也输出克隆进度（写到 stderr），逐行转发到日志。
     const child = spawn(
       'git',
-      ['clone', '--depth', '1', '--single-branch', '--progress', ATLAS_GIT_URL, dst],
+      ['clone', '--depth', '1', '--single-branch', '--progress', gitUrl, dst],
       { env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } },
     )
     const stderrLines: string[] = []
@@ -110,7 +110,13 @@ function gitClone(dst: string): Promise<void> {
 export type AtlasProgressCallback = (percent: number, stage: string) => void | Promise<void>
 
 export class AtlasService {
-  constructor(private dataDir: string) {}
+  private zipUrls: string[]
+  private gitUrl: string
+
+  constructor(private dataDir: string, options: { zipUrls?: string[], gitUrl?: string } = {}) {
+    this.zipUrls = options.zipUrls?.length ? options.zipUrls : DEFAULT_ATLAS_ZIP_URLS
+    this.gitUrl = options.gitUrl || DEFAULT_ATLAS_GIT_URL
+  }
 
   get atlasDir() {
     return path.join(this.dataDir, 'rocom_atlas')
@@ -352,7 +358,7 @@ export class AtlasService {
     try {
       let zipBuffer: Buffer | null = null
       const zipErrors: string[] = []
-      for (const url of ATLAS_ZIP_URLS) {
+      for (const url of this.zipUrls) {
         try {
           await emit(10, '正在下载图鉴压缩包')
           zipBuffer = await this.downloadZipWithProgress(ctx, url)
@@ -380,7 +386,7 @@ export class AtlasService {
       } else {
         logger.warn(`GitHub zip 下载失败，尝试 git clone：${zipErrors.join(' | ')}`)
         await emit(20, '正在 git clone 图鉴仓库')
-        await gitClone(cloneDir)
+        await gitClone(cloneDir, this.gitUrl)
         await emit(80, '正在整理图鉴文件')
         stats = this.prepareAtlasDir(cloneDir, preparedDir)
       }

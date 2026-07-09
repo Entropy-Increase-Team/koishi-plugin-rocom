@@ -143,6 +143,8 @@ export interface Config {
   homeQueryPollIntervalMs: number
   homeQueryTimeoutMs: number
   lowBandwidthMode: boolean
+  atlasZipUrls: string[]
+  atlasGitUrl: string
   imageCompressionEnabled: boolean
   imageCompressionMinBytes: number
   imageCompressionLevel: number
@@ -181,6 +183,13 @@ export const Config: Schema<Config> = Schema.intersect([
     homeQueryTimeoutMs: Schema.number().default(180000).description('家园查询排队等候的总超时，单位毫秒，超时后提示稍后重试'),
     lowBandwidthMode: Schema.boolean().default(false).description('低带宽模式：家园详情不再加载技能图标，降低长图生成压力'),
   }).description('家园查询排队设置'),
+  Schema.object({
+    atlasZipUrls: Schema.array(String).default([
+      'https://codeload.github.com/Entropy-Increase-Team/Rocom-Atlas/zip/refs/heads/main',
+      'https://github.com/Entropy-Increase-Team/Rocom-Atlas/archive/refs/heads/main.zip',
+    ]).description('图鉴压缩包下载地址列表（按顺序尝试，均失败后转 git clone）'),
+    atlasGitUrl: Schema.string().default('https://github.com/Entropy-Increase-Team/Rocom-Atlas.git').description('图鉴 git clone 地址（压缩包下载失败时回退使用）'),
+  }).description('图鉴下载设置'),
 ])
 
 export function apply(ctx: Context, config: Config) {
@@ -199,7 +208,7 @@ export function apply(ctx: Context, config: Config) {
   const searcheggsDir = path.join(renderTemplateRoot, 'searcheggs')
   const eggService = new EggService(searcheggsDir)
   const wikiService = new WikiService(ctx, client)
-  const atlasService = new AtlasService(dataDir)
+  const atlasService = new AtlasService(dataDir, { zipUrls: config.atlasZipUrls, gitUrl: config.atlasGitUrl })
 
   const deps: PluginDeps = { ctx, config, client, userMgr, merchantSubMgr, homeSubMgr, announcementSubMgr, eggService, renderer, wikiService, atlasService }
 

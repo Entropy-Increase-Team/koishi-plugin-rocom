@@ -25,6 +25,8 @@ export interface Config {
     homeQueryPollIntervalMs: number;
     homeQueryTimeoutMs: number;
     lowBandwidthMode: boolean;
+    atlasZipUrls: string[];
+    atlasGitUrl: string;
     imageCompressionEnabled: boolean;
     imageCompressionMinBytes: number;
     imageCompressionLevel: number;
