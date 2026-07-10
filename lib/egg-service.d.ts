@@ -29,8 +29,6 @@ export declare class EggService {
     private formatSizeApiCard;
     private splitNewSizeApiItems;
     private sizeApiResultGroups;
-    private formatEggSearchCard;
-    private formatEggSearchTextLine;
     private mergeCardsByName;
     private mergeSizeCard;
     private minValue;
@@ -51,8 +49,8 @@ export declare class EggService {
         range: any[];
     }, heightDisplay?: string): string;
     buildSizeSearchTextFromApi(height?: number, weight?: number, results?: any, heightDisplay?: string): string;
-    buildEggSearchText(heightMeters?: number, weight?: number, results?: any, heightDisplay?: string): string;
     buildSearchText(pet: any): string;
+    buildSearchTextFromWiki(data: any): string;
     buildCandidatesText(keyword: string, candidates: any[]): string;
     buildWantPetText(pet: any): string;
     buildPairText(a: any, b: any): string;
@@ -117,6 +115,48 @@ export declare class EggService {
         commandHint: string;
         copyright: string;
     };
+    buildSearchDataFromWiki(pet: any, compatibleByGroup?: Record<string, any[]>): {
+        pet_name: any;
+        pet_id: any;
+        pet_icon: any;
+        pet_image: any;
+        type_label: string;
+        egg_groups_label: string;
+        egg_groups: (string | number)[];
+        egg_group_labels: {
+            [k: string]: string;
+        };
+        male_rate: number;
+        female_rate: number;
+        hatch_label: string;
+        weight_label: string;
+        height_label: string;
+        total_compatible: number;
+        is_undiscovered: boolean;
+        egg_group_sections: {
+            id: string | number;
+            label: string;
+            desc: string;
+            count: number;
+            members: {
+                name: any;
+                id: any;
+                type_label: string;
+                egg_groups_label: string;
+            }[];
+            has_more: boolean;
+            total: number;
+        }[];
+        total_stats: number;
+        egg_details: {
+            has_data: boolean;
+        };
+        commandHint: string;
+        copyright: string;
+    };
+    private wikiEggGroups;
+    private wikiTypeLabel;
+    private formatWikiMember;
     buildPairData(a: any, b: any): {
         commandHint: string;
         copyright: string;
@@ -226,15 +266,6 @@ export declare class EggService {
         perfect_matches: any[];
         range_matches: any[];
         total_count: number;
-        has_results: boolean;
-        commandHint: string;
-        copyright: string;
-    };
-    buildEggSearchData(heightMeters?: number, weight?: number, results?: any, heightDisplay?: string): {
-        query_label: string;
-        perfect_matches: any;
-        range_matches: any[];
-        total_count: any;
         has_results: boolean;
         commandHint: string;
         copyright: string;

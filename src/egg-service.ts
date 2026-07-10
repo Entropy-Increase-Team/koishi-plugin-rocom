@@ -339,45 +339,6 @@ export class EggService {
     }
   }
 
-  private formatEggSearchCard(item: any) {
-    const eggGroups = Array.isArray(item?.egg_groups)
-      ? item.egg_groups
-        .map((group: any) => group?.official_name || group?.display_name || `蛋组${group?.group_id}`)
-        .filter(Boolean)
-      : []
-    const heightRange = Array.isArray(item?.height_range_m) ? item.height_range_m : []
-    const weightRange = Array.isArray(item?.weight_range_kg) ? item.weight_range_kg : []
-    const typeLabel = Array.isArray(item?.unit_type) && item.unit_type.length
-      ? item.unit_type.join(' / ')
-      : '未知'
-
-    return {
-      id: item?.id || '-',
-      name: item?.name || '未知精灵',
-      icon: item?.pet_icon_url || petIconUrl(item?.id),
-      image: item?.pet_img_url || petImageUrl(item?.id),
-      type_label: typeLabel,
-      egg_group_ids: Array.isArray(item?.egg_groups)
-        ? item.egg_groups.map((group: any) => Number(group?.group_id)).filter((value: number) => Number.isFinite(value))
-        : [],
-      egg_groups_label: eggGroups.length ? eggGroups.join(' / ') : '暂无蛋组数据',
-      height_min: num(heightRange[0]),
-      height_max: num(heightRange[1]),
-      height_label: fmtRange(num(heightRange[0]), num(heightRange[1]), 'm'),
-      weight_min: num(weightRange[0]),
-      weight_max: num(weightRange[1]),
-      weight_label: fmtRange(num(weightRange[0]), num(weightRange[1]), 'kg'),
-      probability: null,
-      match_count: null,
-      match_info_label: '',
-    }
-  }
-
-  private formatEggSearchTextLine(item: any) {
-    const card = this.formatEggSearchCard(item)
-    return `${card.name} (#${card.id}) — ${card.height_label} / ${card.weight_label} · ${card.egg_groups_label}`
-  }
-
   private mergeCardsByName(perfect: any[], ranged: any[]): [any[], any[]] {
     const perfectMap = new Map<string, any>()
     const rangedMap = new Map<string, any>()
@@ -538,25 +499,6 @@ export class EggService {
     return lines.join('\n')
   }
 
-  buildEggSearchText(heightMeters?: number, weight?: number, results?: any, heightDisplay?: string): string {
-    const cond: string[] = []
-    if (heightMeters != null) cond.push(`身高=${heightDisplay || `${formatNumber(heightMeters)}m`}`)
-    if (weight != null) cond.push(`体重=${weight}kg`)
-    const condStr = cond.join(' + ') || '当前条件'
-    const items = Array.isArray(results?.items) ? results.items : []
-    if (!items.length) return `❌ 未找到符合 ${condStr} 的精灵。`
-
-    const total = results?.total ?? items.length
-    const lines = [`✅ 符合 ${condStr} 的精灵（共 ${total} 只）：`]
-    items.slice(0, 10).forEach((item: any, index: number) => {
-      lines.push(`  ${index + 1}. ${this.formatEggSearchTextLine(item)}`)
-    })
-    if (results?.has_more) {
-      lines.push(`  ... 还有更多结果，可尝试更精确的尺寸或等待后续分页支持。`)
-    }
-    return lines.join('\n')
-  }
-
   buildSearchText(pet: any): string {
     const egs = this.getEggGroups(pet)
     const compat = this.getCompatiblePets(pet)
@@ -567,6 +509,17 @@ export class EggService {
       `可配种精灵数：${compat.length}`,
     ]
     if (egs.includes(1)) lines.push('⚠️ 该精灵属于「未发现」蛋组，无法配种。')
+    return lines.join('\n')
+  }
+
+  buildSearchTextFromWiki(data: any): string {
+    const lines = [
+      `🥚 ${data?.pet_name || '未知精灵'} (#${data?.pet_id || '-'})`,
+      `属性：${data?.type_label || '未知'}`,
+      `蛋组：${data?.egg_groups_label || '暂无蛋组数据'}`,
+      `可配种精灵数：${data?.total_compatible || 0}`,
+    ]
+    if (data?.is_undiscovered) lines.push('⚠️ 该精灵属于「未发现」蛋组，无法配种。')
     return lines.join('\n')
   }
 
@@ -668,6 +621,126 @@ export class EggService {
     }
   }
 
+  buildSearchDataFromWiki(pet: any, compatibleByGroup: Record<string, any[]> = {}) {
+    const eggGroups = this.wikiEggGroups(pet)
+    const eggGroupIds = eggGroups.map(group => group.id)
+    const eggGroupLabels = Object.fromEntries(eggGroups.map(group => [group.id, group.name]))
+    const seen = new Set<string>()
+    let totalCompatible = 0
+    const sections = eggGroups.map(group => {
+      const isUndiscovered = group.id === 1 || group.name.includes('未发现')
+      if (isUndiscovered) {
+        return {
+          id: 1,
+          label: '未发现',
+          desc: '不能和任何精灵生蛋，多用于传说中的精灵',
+          count: 0,
+          members: [],
+          has_more: false,
+          total: 0,
+        }
+      }
+
+      const rawMembers = compatibleByGroup[String(group.id)] || []
+      const members = rawMembers
+        .filter(item => String(item?.pet_id ?? item?.id ?? '') !== String(pet?.pet_id ?? pet?.id ?? ''))
+        .map(item => {
+          const key = String(item?.pet_id ?? item?.id ?? item?.name ?? '')
+          if (key && !seen.has(key)) {
+            seen.add(key)
+            totalCompatible += 1
+          }
+          return this.formatWikiMember(item)
+        })
+      return {
+        id: group.id,
+        label: group.name,
+        desc: '',
+        count: members.length,
+        members: members.slice(0, 30),
+        has_more: members.length > 30,
+        total: members.length,
+      }
+    })
+
+    const petId = pet?.pet_id ?? pet?.id ?? '-'
+    const height = pet?.body_size?.height || {}
+    const weight = pet?.body_size?.weight || {}
+    const attributes = pet?.attributes || {}
+    const maleRate = num(pet?.gender_ratio?.male_percent)
+    const femaleRate = num(pet?.gender_ratio?.female_percent)
+    const totalStats = num(attributes?.sum) ?? ['hp', 'physical_attack', 'magic_attack', 'physical_defense', 'magic_defense', 'speed']
+      .reduce((sum, key) => sum + (num(attributes?.[key]) || 0), 0)
+
+    return {
+      pet_name: pet?.name || '未知精灵',
+      pet_id: petId,
+      pet_icon: pet?.icon || pet?.small_icon || petIconUrl(petId),
+      pet_image: pet?.small_icon || pet?.icon || petImageUrl(petId),
+      type_label: this.wikiTypeLabel(pet),
+      egg_groups_label: eggGroups.map(group => group.name).join(' / ') || '暂无蛋组数据',
+      egg_groups: eggGroupIds,
+      egg_group_labels: eggGroupLabels,
+      male_rate: maleRate,
+      female_rate: femaleRate,
+      hatch_label: '暂无数据',
+      weight_label: fmtRange(num(weight?.min_kg), num(weight?.max_kg), 'kg'),
+      height_label: fmtRange(num(height?.min_m), num(height?.max_m), 'm'),
+      total_compatible: totalCompatible,
+      is_undiscovered: eggGroups.some(group => group.id === 1 || group.name.includes('未发现')),
+      egg_group_sections: sections,
+      total_stats: totalStats,
+      egg_details: { has_data: false },
+      commandHint: '数据来自新版 Wiki；接口不可用时自动回退本地查蛋',
+      copyright: 'Koishi & WeGame 洛克王国插件',
+    }
+  }
+
+  private wikiEggGroups(pet: any): Array<{ id: number | string, name: string }> {
+    const groups = Array.isArray(pet?.egg_groups) ? pet.egg_groups : []
+    const normalized = groups
+      .map((group: any) => {
+        if (group && typeof group === 'object') {
+          const name = String(group?.name || group?.label || '').trim()
+          const id = group?.id ?? group?.group_id ?? (name.includes('未发现') ? 1 : name)
+          return name ? { id, name } : null
+        }
+        const name = String(group || '').trim()
+        return name ? { id: name.includes('未发现') ? 1 : name, name } : null
+      })
+      .filter(Boolean) as Array<{ id: number | string, name: string }>
+    if (normalized.length) return normalized
+
+    const ids = Array.isArray(pet?.egg_group_ids) ? pet.egg_group_ids : []
+    const names = Array.isArray(pet?.egg_group_names) ? pet.egg_group_names : []
+    return names.map((rawName: any, index: number) => {
+      const name = String(rawName || '').trim()
+      return {
+        id: ids[index] ?? (name.includes('未发现') ? 1 : name),
+        name,
+      }
+    }).filter(group => group.name)
+  }
+
+  private wikiTypeLabel(pet: any): string {
+    const typeNames = Array.isArray(pet?.type_names) ? pet.type_names.filter(Boolean) : []
+    if (typeNames.length) return typeNames.join(' / ')
+    const types = Array.isArray(pet?.types)
+      ? pet.types.map((type: any) => type?.name || type).filter(Boolean)
+      : []
+    return types.length ? types.join(' / ') : '未知'
+  }
+
+  private formatWikiMember(item: any) {
+    const groups = this.wikiEggGroups(item)
+    return {
+      name: item?.name || '未知精灵',
+      id: item?.pet_id ?? item?.id ?? '-',
+      type_label: this.wikiTypeLabel(item),
+      egg_groups_label: groups.map(group => group.name).join(' / ') || '暂无蛋组数据',
+    }
+  }
+
   buildPairData(a: any, b: any) {
     const ev = this.evaluatePair(a, b)
     const makePetCard = (p: any) => ({
@@ -739,7 +812,10 @@ export class EggService {
       groups.exact.map((item: any) => this.formatSizeApiCard(item)),
       groups.candidates.map((item: any) => this.formatSizeApiCard(item)),
     )
-    const searchMode = results?.searchMode || ''
+    const poolName = results?.query?.pool && typeof results.query.pool === 'object'
+      ? results.query.pool.name
+      : ''
+    const searchMode = results?.searchMode || poolName || ''
     const queryLabel = `${conditions.join(' / ') || '尺寸反查'}${searchMode ? ` · 模式 ${searchMode}` : ''}`
     return {
       query_label: queryLabel,
@@ -752,28 +828,8 @@ export class EggService {
     }
   }
 
-  buildEggSearchData(heightMeters?: number, weight?: number, results?: any, heightDisplay?: string) {
-    const conditions: string[] = []
-    if (heightMeters != null) conditions.push(`身高 ${heightDisplay || `${formatNumber(heightMeters)} m`}`)
-    if (weight != null) conditions.push(`体重 ${weight} kg`)
-    const cards = (Array.isArray(results?.items) ? results.items : []).map((item: any) => this.formatEggSearchCard(item))
-    const pageNo = num(results?.page_no)
-    const totalPages = num(results?.total_pages)
-    const pageLabel = pageNo && totalPages ? ` · 第 ${pageNo}/${totalPages} 页` : ''
-
-    return {
-      query_label: `${conditions.join(' / ') || '孵蛋反查'}${pageLabel}`,
-      perfect_matches: cards,
-      range_matches: [],
-      total_count: results?.total ?? cards.length,
-      has_results: cards.length > 0,
-      commandHint: '洛克查蛋 <精灵名> | 洛克查蛋 0.18m 1.5kg | 洛克配种 <父体> <母体>',
-      copyright: 'Koishi & WeGame 洛克王国插件',
-    }
-  }
-
   private buildEggDetails(breeding: any) {
-    if (!breeding) return { has_data: false }
+    if (!breeding || !Object.keys(breeding).length) return { has_data: false }
     const baseProb = breeding.egg_base_glass_prob_array
     const addProb = breeding.egg_add_glass_prob_array
     const preciousMap: Record<number, string> = {

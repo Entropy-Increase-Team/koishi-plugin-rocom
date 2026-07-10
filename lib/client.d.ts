@@ -66,7 +66,7 @@ export declare class RocomClient {
     getLineupList(ctx: Context, fwToken: string, pageNo?: number, category?: string, userIdentifier?: string): Promise<any>;
     getExchangePosters(ctx: Context, fwToken: string, pageNo?: number, userIdentifier?: string): Promise<any>;
     getMerchantInfo(ctx: Context, refresh?: boolean): Promise<any>;
-    queryPetSize(ctx: Context, diameter: number, weight: number, sameRideEgg?: boolean, userIdentifier?: string): Promise<any>;
+    queryPetSize(ctx: Context, diameter: number, weight: number, pool?: string, pageNo?: number, pageSize?: number, userIdentifier?: string): Promise<any>;
     getActivitiesInfo(ctx: Context, refresh?: boolean, userIdentifier?: string): Promise<any>;
     syncConfig(ctx: Context, userIdentifier?: string): Promise<any>;
     getAnnouncementList(ctx: Context, params?: {
@@ -80,7 +80,6 @@ export declare class RocomClient {
         order?: string;
     }, userIdentifier?: string): Promise<any>;
     getAnnouncementDetail(ctx: Context, threadId: number | string, userIdentifier?: string): Promise<any>;
-    getEggSearch(ctx: Context, height: number, weight: number, pageNo?: number, pageSize?: number, userIdentifier?: string): Promise<any>;
     getEggGroups(ctx: Context, userIdentifier?: string): Promise<any>;
     getEggGroupPets(ctx: Context, groupIds: string | number[], matchMode?: 'any' | 'all', pageNo?: number, pageSize?: number, userIdentifier?: string): Promise<any>;
     getEggPetGroups(ctx: Context, query: string, limit?: number, userIdentifier?: string): Promise<any>;

@@ -705,28 +705,29 @@ export class RocomClient {
     })
   }
 
-  async queryPetSize(ctx: Context, diameter: number, weight: number, sameRideEgg = false, userIdentifier = '') {
-    // 新版蛋尺寸反查：/wiki/pet-size/query（items[].pet/egg_size/match 结构），失败时回退旧接口。
-    const newParams: any = this.scopedParams({
+  async queryPetSize(
+    ctx: Context,
+    diameter: number,
+    weight: number,
+    pool = 'magic',
+    pageNo = 1,
+    pageSize = 30,
+    userIdentifier = '',
+  ) {
+    const params = this.scopedParams({
       diameter,
       weight,
-      pool: sameRideEgg ? 'ride' : 'magic',
+      pool: pool || 'magic',
       include_display_only: 'false',
-      page_no: 1,
-      page_size: 30,
+      page_no: Math.max(Number(pageNo) || 1, 1),
+      page_size: Math.min(Math.max(Number(pageSize) || 30, 1), 100),
     }, userIdentifier)
-    const newRes = await this.get(
+    return this.get(
       ctx,
       '/api/v1/games/rocom/wiki/pet-size/query',
       this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
-      newParams,
-      { silentFailureDetails: true },
+      params,
     )
-    if (newRes && Array.isArray(newRes.items)) return newRes
-
-    const params: any = this.scopedParams({ diameter, weight }, userIdentifier)
-    if (sameRideEgg) params.sameRideEgg = 1
-    return this.get(ctx, '/api/v1/games/rocom/pet/size-query', this.wegameHeaders('', userIdentifier, 'bot', 'koishi'), params)
   }
 
   async getActivitiesInfo(ctx: Context, refresh = false, userIdentifier = '') {
@@ -780,22 +781,6 @@ export class RocomClient {
       '/api/v1/games/rocom/announcement/detail',
       this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
       this.scopedParams({ thread_id: threadId }, userIdentifier),
-    )
-  }
-
-  async getEggSearch(
-    ctx: Context,
-    height: number,
-    weight: number,
-    pageNo = 1,
-    pageSize = 20,
-    userIdentifier = '',
-  ) {
-    return this.get(
-      ctx,
-      '/api/v1/games/rocom/egg/search',
-      this.wegameHeaders('', userIdentifier, 'bot', 'koishi'),
-      this.scopedParams({ height, weight, page_no: pageNo, page_size: pageSize }, userIdentifier),
     )
   }
 

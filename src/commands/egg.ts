@@ -133,18 +133,18 @@ export function register(deps: PluginDeps) {
 
         if (height != null && weight != null) {
           const heightInMeters = heightMeters ?? height / 100
-          const eggSearchResults = await client.getEggSearch(ctx, heightInMeters, weight, 1, 20, session?.userId || '')
-          if (eggSearchResults) {
-            data = eggService.buildEggSearchData(heightInMeters, weight, eggSearchResults, heightDisplay)
-            fallback = eggService.buildEggSearchText(heightInMeters, weight, eggSearchResults, heightDisplay)
-          }
-
-          if (!data) {
-            const backendResults = await client.queryPetSize(ctx, heightInMeters, weight, false, session?.userId || '')
-            if (backendResults) {
-              data = eggService.buildSizeSearchDataFromApi(height, weight, backendResults, heightDisplay)
-              fallback = eggService.buildSizeSearchTextFromApi(height, weight, backendResults, heightDisplay)
-            }
+          const backendResults = await client.queryPetSize(
+            ctx,
+            heightInMeters,
+            weight,
+            'magic',
+            1,
+            30,
+            session?.userId || '',
+          )
+          if (backendResults) {
+            data = eggService.buildSizeSearchDataFromApi(height, weight, backendResults, heightDisplay)
+            fallback = eggService.buildSizeSearchTextFromApi(height, weight, backendResults, heightDisplay)
           }
         }
 
@@ -160,6 +160,43 @@ export function register(deps: PluginDeps) {
 
       const name = nameParts.join(' ')
       if (!name) return '请输入精灵名称。用法：洛克.查蛋 <精灵名>'
+
+      let backendDetail: any = null
+      let backendProfile: any = null
+      const backendList = await client.listWikiPets(ctx, name, 1, 10)
+      const backendItems = Array.isArray(backendList?.items) ? backendList.items : []
+      if (backendItems.length) {
+        let selected = backendItems.find((item: any) => {
+          const itemName = String(item?.name || '').trim()
+          const itemForm = String(item?.form || '').trim()
+          return itemName === name || (itemForm && `${itemName}${itemForm}` === name)
+        })
+        if (!selected && backendItems.length === 1) selected = backendItems[0]
+        const selectedId = selected?.pet_id ?? selected?.id
+        if (selectedId != null && selectedId !== '') {
+          backendDetail = await client.getWikiPet(ctx, selectedId)
+          if (!backendDetail) backendDetail = selected
+          backendProfile = await client.getWikiPetProfile(ctx, selectedId)
+        }
+      }
+
+      if (backendDetail) {
+        const compatibleByGroup: Record<string, any[]> = {}
+        const backendPet = { ...backendDetail, ...(backendProfile || {}) }
+        const eggGroups = Array.isArray(backendPet?.egg_groups) ? backendPet.egg_groups : []
+        const eggGroupIds = eggGroups.length
+          ? eggGroups.map((group: any) => group?.id).filter((id: any) => id != null && id !== '')
+          : Array.isArray(backendPet?.egg_group_ids) ? backendPet.egg_group_ids : []
+        for (const groupId of eggGroupIds) {
+          const groupResults = await client.listWikiPets(ctx, '', 1, 31, { egg_group_id: groupId })
+          compatibleByGroup[String(groupId)] = Array.isArray(groupResults?.items) ? groupResults.items : []
+        }
+        const data = eggService.buildSearchDataFromWiki(backendPet, compatibleByGroup)
+        data.commandHint = '数据来自新版 Wiki；接口不可用时自动回退本地查蛋'
+        data.copyright = 'Koishi & WeGame 洛克王国插件'
+        await sendEggImage(deps, session, 'searcheggs', data, eggService.buildSearchTextFromWiki(data))
+        return
+      }
 
       const sr = eggService.search(name)
       if (sr.matchType === 'multi') {

@@ -15,3 +15,4 @@ lib/render-templates/
 *.tgz
 MERCHANT_UPDATE_SUMMARY.md
 src/render-templates/yuanxing-shangren/CHANGELOG.md
+docs/rocom-api-new-features-2026-06-09.md
