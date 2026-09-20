@@ -1,0 +1,5 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><link rel="stylesheet" href="{{_res_path}}render-templates/announcement/style.css"></head>
+<body><main class="announcement-list-page"><header><span>洛克王国 · 第 {{page}} 页</span><h1>{{title}}</h1></header>
+{{each items item}}<article><h2>{{item.title}}</h2><p>{{item.summary}}</p><small>#{{item.id}} · {{item.publishedAt}}</small></article>{{/each}}
+{{if !items.length}}<p>当前页暂无公告</p>{{/if}}<footer>{{commandHint}}<br>{{copyright}}</footer></main></body></html>

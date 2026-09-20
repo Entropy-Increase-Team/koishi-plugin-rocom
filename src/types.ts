@@ -20,6 +20,10 @@ export interface PluginConfig {
   merchantCheckMode: 'interval' | 'times'
   merchantCheckInterval: number
   merchantCheckTimes: string[]
+  merchantTimezone: string
+  subscriptionGroupAdminEnabled: boolean
+  subscriptionBotAdminEnabled: boolean
+  subscriptionBotAdminAuthority: number
   homeSubscriptionEnabled: boolean
   homeSubscriptionIntervalMinutes: number
   announcementSubscriptionEnabled: boolean
@@ -28,6 +32,7 @@ export interface PluginConfig {
   homeQueryPollIntervalMs: number
   homeQueryTimeoutMs: number
   lowBandwidthMode: boolean
+  renderTimeout: number
   imageCompressionEnabled: boolean
   imageCompressionMinBytes: number
   imageCompressionLevel: number

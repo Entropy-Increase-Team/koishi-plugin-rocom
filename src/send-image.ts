@@ -106,11 +106,19 @@ export function compressPngImage(image: Buffer, config: Pick<PluginConfig, 'imag
 
 export async function sendImageWithFallback(
   session: any,
-  image: Buffer | null,
+  image: Buffer | Buffer[] | null,
   fallbackText: string,
   scene: string,
   compressionConfig?: Pick<PluginConfig, 'imageCompressionEnabled' | 'imageCompressionMinBytes' | 'imageCompressionLevel'>,
 ) {
+  if (Array.isArray(image)) {
+    if (!image.length) return sendImageWithFallback(session, null, fallbackText, scene, compressionConfig)
+    for (const page of image) {
+      const ok = await sendImageWithFallback(session, page, fallbackText, scene, compressionConfig)
+      if (!ok) return false
+    }
+    return true
+  }
   const ctxInfo = formatSessionContext(session)
 
   if (!image) {
@@ -131,8 +139,9 @@ export async function sendImageWithFallback(
   try {
     const result = await session.send(h.image(outputImage, detectImageMime(outputImage)))
     if (!hasSendResult(result)) {
-      logger.warn(`[${scene}] image send returned empty result | size=${outputImage.length}B | ${ctxInfo}`)
+      throw new Error('图片发送未返回消息 ID')
     }
+    return true
   } catch (e) {
     logger.error(`[${scene}] image send failed | size=${outputImage.length}B | ${ctxInfo} | ${e}`)
     try {

@@ -2,26 +2,16 @@ import { Logger } from 'koishi'
 import { PluginDeps } from '../types'
 import { ActivitiesService } from '../activities-service'
 import { sendImageWithFallback } from '../send-image'
-import { sendScheduledMessage } from '../subscription-send'
+import { sendScheduledImageWithFallback } from '../subscription-send'
+import { canManageSubscription, isDirectSession } from '../permissions'
+import { createRunner } from '../subscription-runner'
+import { buildAnnouncementView, buildAnnouncementListView, announcementViewText } from '../announcement-service'
 
 const logger = new Logger('rocom-tools')
 const activitiesService = new ActivitiesService()
 
 function trimText(value: unknown): string {
   return String(value ?? '').trim()
-}
-
-function stripHtml(value: unknown): string {
-  return trimText(value)
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
 }
 
 function formatDate(value: unknown): string {
@@ -70,36 +60,45 @@ function announcementTimestamp(item: any): number {
 }
 
 function announcementSubscriptionKey(session: any): string {
-  const privateChat = !session?.guildId
+  const privateChat = isDirectSession(session)
   return [session?.platform || '', session?.channelId || 'private', privateChat ? (session?.userId || '') : '', 'announcement'].join(':')
 }
 
 // 上游 v3.2.0：轮询最新公告，向订阅会话推送新公告提醒。
-async function checkAnnouncementSubscriptions(deps: PluginDeps) {
+async function checkAnnouncementSubscriptions(deps: PluginDeps, signal?: AbortSignal) {
   const { ctx, client, announcementSubMgr } = deps
   const subs = announcementSubMgr.getAll()
   const subEntries = Object.entries(subs)
   if (!subEntries.length) return { subscriptions: 0, pushed: 0 }
 
-  const latest = await client.getLatestAnnouncement(ctx, { category_id: 99 })
+  if (signal?.aborted) return { subscriptions: 0, pushed: 0 }
+  const latest = await client.getLatestAnnouncement(ctx, { category_id: 99 }, '', signal)
+  if (signal?.aborted) return { subscriptions: 0, pushed: 0 }
   const item = latest?.detail || latest?.announcement || latest
   const latestId = announcementId(item)
   if (!latestId) return { subscriptions: subEntries.length, pushed: 0 }
   const latestTs = announcementTimestamp(item)
 
+  const view = buildAnnouncementView(latest, deps.config.apiBaseUrl)
+  let image: Buffer[] | null | undefined
   let pushed = 0
   for (const [key, sub] of subEntries) {
+    if (signal?.aborted) break
+    if (JSON.stringify(announcementSubMgr.getAll()[key]) !== JSON.stringify(sub)) continue
     if (latestId === String(sub.last_id || '')) continue
     if (latestTs && sub.since_ts && latestTs <= sub.since_ts) continue
-    const message = [`【洛克王国新公告】`, buildAnnouncementDetailText(latest)].join('\n')
+    const message = announcementViewText(view)
+    if (image === undefined) image = await deps.renderer.renderPages(ctx, 'announcement/detail', view, { signal })
+    if (signal?.aborted) break
     try {
-      const sent = await sendScheduledMessage(ctx, {
+      const sent = await sendScheduledImageWithFallback(ctx, {
         platform: sub.platform,
+        selfId: sub.self_id,
         channelId: sub.channel_id || sub.guild_id || sub.user_id || '',
         guildId: sub.guild_id || '',
         userId: sub.user_id || '',
-      }, message)
-      if (!sent) continue
+      }, image, message, false, signal)
+      if (!sent || signal?.aborted || JSON.stringify(announcementSubMgr.getAll()[key]) !== JSON.stringify(sub)) continue
     } catch (e) {
       logger.warn(`公告订阅推送失败: ${e}`)
       continue
@@ -138,36 +137,14 @@ function buildAnnouncementListText(data: any, page: number): string {
   return lines.join('\n')
 }
 
-function buildAnnouncementDetailText(data: any): string {
-  const item = data?.detail || data?.announcement || data
-  if (!item || typeof item !== 'object') return '公告详情为空。'
-
-  const title = trimText(item?.title) || '未命名公告'
-  const id = announcementId(item)
-  const summary = trimText(item?.summary)
-  const content = stripHtml(item?.content?.text || item?.text || item?.content)
-  const lines = [
-    `公告详情${id ? ` #${id}` : ''}`,
-    title,
-    `发布时间：${formatDate(item?.publishAt || item?.published_at || item?.createdAt)}`,
-  ]
-  if (summary) lines.push(`摘要：${summary}`)
-  if (content) {
-    lines.push('')
-    lines.push(content.length > 900 ? `${content.slice(0, 900)}...` : content)
-  }
-  const images = Array.isArray(item?.content?.indexes)
-    ? item.content.indexes.flatMap((entry: any) => Array.isArray(entry?.imageUrl) ? entry.imageUrl : [])
-    : []
-  if (images.length) {
-    lines.push('')
-    lines.push(`图片资源：${images.slice(0, 3).join('\n')}`)
-  }
-  return lines.join('\n')
-}
-
 export function register(deps: PluginDeps) {
   const { ctx, client, config, renderer } = deps
+  const runner = createRunner(ctx)
+  const sendDetail = async (session: any, data: any) => {
+    const view = buildAnnouncementView(data, config.apiBaseUrl)
+    const pages = await renderer.renderPages(ctx, 'announcement/detail', view)
+    await sendImageWithFallback(session, pages, announcementViewText(view), 'announcement:detail', config)
+  }
 
   ctx.command('洛克').subcommand('.日历 [mode:string]', '查看洛克活动日历')
     .alias('洛克日历')
@@ -188,7 +165,8 @@ export function register(deps: PluginDeps) {
       const currentPage = pageNumber(page)
       const data = await client.getAnnouncementList(ctx, { category_id: 99, page: currentPage, limit: 10 }, session?.userId || '')
       if (!data) return `公告列表查询失败：${client.getLastErrorBrief()}`
-      return buildAnnouncementListText(data, currentPage)
+      const pages = await renderer.renderPages(ctx, 'announcement/list', buildAnnouncementListView(data, currentPage))
+      await sendImageWithFallback(session, pages, buildAnnouncementListText(data, currentPage), 'announcement:list', config)
     })
 
   ctx.command('洛克').subcommand('.最新公告', '查看最新洛克公告')
@@ -196,7 +174,7 @@ export function register(deps: PluginDeps) {
     .action(async ({ session }) => {
       const data = await client.getLatestAnnouncement(ctx, { category_id: 99 }, session?.userId || '')
       if (!data) return `最新公告查询失败：${client.getLastErrorBrief()}`
-      return buildAnnouncementDetailText(data)
+      await sendDetail(session, data)
     })
 
   ctx.command('洛克').subcommand('.公告详情 <threadId:string>', '查看公告详情')
@@ -206,20 +184,22 @@ export function register(deps: PluginDeps) {
       if (!/^\d+$/.test(id)) return '请提供公告 ID。用法：洛克.公告详情 <公告ID>'
       const data = await client.getAnnouncementDetail(ctx, id, session?.userId || '')
       if (!data) return `公告详情查询失败：${client.getLastErrorBrief()}`
-      return buildAnnouncementDetailText(data)
+      await sendDetail(session, data)
     })
 
-  ctx.command('订阅洛克公告', '订阅洛克王国新公告推送')
+  ctx.command('订阅洛克公告', '订阅洛克王国新公告推送').userFields(['authority'])
     .action(async ({ session }) => {
-      const privateChat = !session?.guildId
-      if (!privateChat && !config.adminUserIds.includes(session?.userId || '')) return '此指令仅限管理员使用。'
+      const privateChat = isDirectSession(session)
+      if (!canManageSubscription(config, session)) return '此指令仅限群管理员或机器人管理员使用。'
       const key = announcementSubscriptionKey(session)
       // 以当前最新公告为基线，只推送之后的新公告。
       const latest = await client.getLatestAnnouncement(ctx, { category_id: 99 }, session?.userId || '')
+      if (!latest) return '获取公告基线失败，请稍后重新订阅。'
       const item = latest?.detail || latest?.announcement || latest
       deps.announcementSubMgr.upsert(key, {
         key,
         platform: session?.platform || '',
+        self_id: session?.selfId || session?.bot?.selfId || '',
         channel_id: session?.channelId || '',
         guild_id: session?.guildId || '',
         user_id: privateChat ? (session?.userId || '') : '',
@@ -231,10 +211,10 @@ export function register(deps: PluginDeps) {
       return '已订阅洛克王国新公告推送，检测到新公告时会在当前会话提醒。'
     })
 
-  ctx.command('取消订阅洛克公告', '取消洛克王国新公告推送')
+  ctx.command('取消订阅洛克公告', '取消洛克王国新公告推送').userFields(['authority'])
     .action(async ({ session }) => {
-      const privateChat = !session?.guildId
-      if (!privateChat && !config.adminUserIds.includes(session?.userId || '')) return '此指令仅限管理员使用。'
+      const privateChat = isDirectSession(session)
+      if (!canManageSubscription(config, session)) return '此指令仅限群管理员或机器人管理员使用。'
       const deleted = deps.announcementSubMgr.deleteMatching({
         platform: session?.platform || '',
         channelId: session?.channelId || '',
@@ -245,7 +225,7 @@ export function register(deps: PluginDeps) {
 
   if (config.announcementSubscriptionEnabled) {
     ctx.setInterval(() => {
-      checkAnnouncementSubscriptions(deps).catch(err => logger.warn(`公告订阅检查失败: ${err}`))
+      runner(signal => checkAnnouncementSubscriptions(deps, signal)).catch(err => logger.warn(`公告订阅检查失败: ${err}`))
     }, Math.max(1, config.announcementPollIntervalMinutes || 10) * 60000)
   }
 

@@ -17,6 +17,7 @@ export interface MerchantSubscription {
   group_id: string
   channel_id?: string
   platform?: string
+  self_id?: string
   user_id?: string
   type?: string
   mention_all: boolean
@@ -33,6 +34,9 @@ export interface HomeSubscription {
   uid: string
   channel_id?: string
   platform?: string
+  self_id?: string
+  notify_user_id?: string
+  nickname?: string
   guild_id?: string
   user_id?: string
   updated_by: string
@@ -227,6 +231,7 @@ export class HomeSubscriptionManager {
 export interface AnnouncementSubscription {
   key: string
   platform?: string
+  self_id?: string
   channel_id?: string
   guild_id?: string
   user_id?: string

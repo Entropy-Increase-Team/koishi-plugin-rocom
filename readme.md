@@ -122,3 +122,24 @@ Koishi 版洛克王国数据查询插件。插件基于 WeGame / 后端接口提
 ## 许可证
 
 本项目使用 AGPL-3.0 License。
+
+
+## RoCom 4.1 对齐更新
+
+新增异色/炫彩排行榜、阵容分享码解析与历史查询；玩家查询显示新版名片和收集数，远行商人优先使用实时接口。查蛋优先接入 Egg API，并在图文中标注体型。公告支持图片和长文分页。
+
+订阅已统一权限、Bot 定向发送、失败重试和卸载取消。原有白名单继续生效；默认同时允许群主/管理员管理当前群订阅。要维持只允许 Bot 管理员的策略，将 `subscriptionGroupAdminEnabled` 设为 false。
+
+| 新配置 | 默认值 | 作用 |
+| --- | --- | --- |
+| `subscriptionGroupAdminEnabled` | true | 群主/管理员管理商人、家园及公告订阅 |
+| `subscriptionBotAdminEnabled` | true | 白名单或高权限用户管理订阅 |
+| `subscriptionBotAdminAuthority` | 4 | Koishi Bot 管理员权限阈值 |
+| `merchantTimezone` | Asia/Shanghai | 商人轮次、显示时间和调度时区 |
+| `renderTimeout` | 30000 | 导航、图片、字体和截图共享的总预算（毫秒） |
+
+现有 `merchantUiStyle` 选择新/旧商人界面，`merchantCheckMode` 选择间隔或指定时刻，`merchantCheckTimes` 设置 HH:MM 列表。
+
+开发检查：`npm run check`、`npm run build`、`npm run test:alignment`。真实浏览器检查在构建后执行 `npm run test:render`，可通过 `ROCOM_TEST_BROWSER` 指定本地 Chrome 路径；测试拦截 HTTP(S) 请求。
+
+详细结果见 [修复验收记录](docs/rocom-4.1-fixes-2026-09-21.md)。生产后端权限与官方 QQ 的实际投递仍需在部署环境联调。

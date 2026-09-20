@@ -27,6 +27,7 @@ export declare class EggService {
     private rangeMatchScore;
     private formatPetCard;
     private formatSizeApiCard;
+    private rangePair;
     private splitNewSizeApiItems;
     private sizeApiResultGroups;
     private mergeCardsByName;
@@ -182,6 +183,13 @@ export declare class EggService {
     };
     buildWantPetData(pet: any): {
         target: {
+            probability: number;
+            match_count: number;
+            match_info_label: string;
+            size_variant: string;
+            size_variant_label: string;
+            size_variant_class: string;
+            size_variant_hint: string;
             id: any;
             name: string;
             icon: string;
@@ -195,15 +203,19 @@ export declare class EggService {
             weight_min: number;
             weight_max: number;
             weight_label: string;
-            probability: number;
-            match_count: number;
-            match_info_label: string;
         };
         egg_groups_label: string;
         female_rate: any;
         male_rate: any;
         is_undiscovered: boolean;
         fathers: {
+            probability: number;
+            match_count: number;
+            match_info_label: string;
+            size_variant: string;
+            size_variant_label: string;
+            size_variant_class: string;
+            size_variant_hint: string;
             id: any;
             name: string;
             icon: string;
@@ -217,9 +229,6 @@ export declare class EggService {
             weight_min: number;
             weight_max: number;
             weight_label: string;
-            probability: number;
-            match_count: number;
-            match_info_label: string;
         }[];
         father_count: number;
         commandHint: string;
@@ -229,6 +238,13 @@ export declare class EggService {
         keyword: string;
         count: number;
         candidates: {
+            probability: number;
+            match_count: number;
+            match_info_label: string;
+            size_variant: string;
+            size_variant_label: string;
+            size_variant_class: string;
+            size_variant_hint: string;
             id: any;
             name: string;
             icon: string;
@@ -242,13 +258,71 @@ export declare class EggService {
             weight_min: number;
             weight_max: number;
             weight_label: string;
-            probability: number;
-            match_count: number;
+        }[];
+        commandHint: string;
+        copyright: string;
+    };
+    buildCandidatesFromEggApi(keyword: string, candidates: any[]): {
+        keyword: string;
+        count: number;
+        candidates: {
+            id: any;
+            name: string;
+            icon: any;
+            image: any;
+            type_label: string;
+            egg_group_ids: any[];
+            egg_groups_label: string;
+            height_min: number;
+            height_max: number;
+            height_label: string;
+            weight_min: number;
+            weight_max: number;
+            weight_label: string;
+            probability: any;
+            match_count: any;
             match_info_label: string;
         }[];
         commandHint: string;
         copyright: string;
     };
+    buildSearchDataFromEggApi(pet: any, compatibleByGroup?: Record<string, any>): {
+        pet_name: string;
+        pet_id: any;
+        pet_icon: any;
+        pet_image: any;
+        type_label: string;
+        egg_groups_label: string;
+        egg_groups: number[];
+        egg_group_labels: Record<number, string>;
+        male_rate: any;
+        female_rate: any;
+        hatch_label: string;
+        weight_label: string;
+        height_label: string;
+        total_compatible: number;
+        compatible_total_known: boolean;
+        is_undiscovered: boolean;
+        egg_group_sections: any[];
+        total_stats: string;
+        egg_details: {
+            has_data: boolean;
+        };
+        commandHint: string;
+        copyright: string;
+    };
+    private formatEggApiCard;
+    private formatEggApiMember;
+    private eggApiGroups;
+    private eggGroupId;
+    private eggGroupLabel;
+    private eggGroupDesc;
+    private isUndiscoveredEggGroup;
+    private eggPetDisplayName;
+    private eggApiTypeLabel;
+    private eggGroupsLabel;
+    private eggHeightRangeM;
+    private eggWeightRangeKg;
     buildSizeSearchData(height?: number, weight?: number, results?: {
         perfect: any[];
         range: any[];

@@ -45,6 +45,7 @@
             属性：{{item.type_label}}<br>
             蛋组：{{item.egg_groups_label}}{{if item.match_info_label}} ｜ 匹配：{{item.match_info_label}}{{/if}}<br>
             身高：{{item.height_label}} ｜ 体重：{{item.weight_label}}
+            {{if item.size_variant_label}}<br><strong>{{item.size_variant_label}}</strong> · {{item.size_variant_hint}}{{/if}}
           </div>
         </div>
         {{/each}}
@@ -66,6 +67,7 @@
             属性：{{item.type_label}}<br>
             蛋组：{{item.egg_groups_label}}{{if item.match_info_label}} ｜ 匹配：{{item.match_info_label}}{{/if}}<br>
             身高：{{item.height_label}} ｜ 体重：{{item.weight_label}}
+            {{if item.size_variant_label}}<br><strong>{{item.size_variant_label}}</strong> · {{item.size_variant_hint}}{{/if}}
           </div>
         </div>
         {{/each}}

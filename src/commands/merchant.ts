@@ -2,6 +2,12 @@ import { Logger } from 'koishi'
 import { PluginDeps } from '../types'
 import { compressPngImage, sendImageWithFallback } from '../send-image'
 import { sendScheduledImageWithFallback } from '../subscription-send'
+import { normalizeMerchant } from '../merchant-service'
+import { MerchantClock } from '../merchant-clock'
+import { canManageSubscription, isDirectSession } from '../permissions'
+import { createRunner } from '../subscription-runner'
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { delay } from '../async-control'
 
 const logger = new Logger('rocom-merchant')
 
@@ -50,6 +56,9 @@ type MerchantProductForRender = {
   is_active: boolean
   start_time: number | null
   end_time: number | null
+  price: number | null
+  limit: number | null
+  item_category: string
 }
 
 type MerchantCardItem = {
@@ -72,31 +81,22 @@ type LegacyMerchantRoundGroup = {
   products: MerchantProductForRender[]
 }
 
-const CHINA_TIMEZONE = 'Asia/Shanghai'
-const chinaPartsFormatter = new Intl.DateTimeFormat('zh-CN', {
-  timeZone: CHINA_TIMEZONE,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  hour12: false,
-})
+const defaultClock = new MerchantClock('Asia/Shanghai')
+// Scoped to each synchronous view build; plugin instances never overwrite another clock.
+const clockScope = new AsyncLocalStorage<MerchantClock>()
+const currentClock = () => clockScope.getStore() || defaultClock
 
 function getChinaParts(input: number | Date = Date.now()) {
-  const parts: Record<string, string> = {}
-  const date = input instanceof Date ? input : new Date(input)
-  for (const item of chinaPartsFormatter.formatToParts(date)) {
-    if (item.type !== 'literal') parts[item.type] = item.value
-  }
+  const ms = input instanceof Date ? input.getTime() : input
+  const parts = currentClock().parts(ms)
+  const [year, month, day] = parts.date.split('-').map(Number)
   return {
-    year: Number(parts.year || '0'),
-    month: Number(parts.month || '0'),
-    day: Number(parts.day || '0'),
-    hour: Number(parts.hour || '0'),
-    minute: Number(parts.minute || '0'),
-    second: Number(parts.second || '0'),
+    year: year || 0,
+    month: month || 0,
+    day: day || 0,
+    hour: parts.hour,
+    minute: parts.minute,
+    second: parts.second,
   }
 }
 
@@ -109,10 +109,6 @@ function getChinaDateText(input: number | Date = Date.now()) {
   return `${parts.year}-${padNumber(parts.month)}-${padNumber(parts.day)}`
 }
 
-function getChinaDayStartMs(input: number | Date = Date.now()) {
-  const parts = getChinaParts(input)
-  return new Date(`${parts.year}-${padNumber(parts.month)}-${padNumber(parts.day)}T00:00:00+08:00`).getTime()
-}
 
 function classifyMerchantItem(item: any): MerchantCategoryKey {
   const start = normalizeTimestamp(item?.start_time)
@@ -166,30 +162,6 @@ function getMerchantActivity(res: any): any {
   return activities[0] || {}
 }
 
-function getMerchantProducts(res: any): any[] {
-  const activity = getMerchantActivity(res)
-  const groups: any[][] = []
-  if (Array.isArray(activity?.products)) groups.push(activity.products)
-  if (Array.isArray(activity?.product_list)) groups.push(activity.product_list)
-  if (Array.isArray(activity?.get_props)) groups.push(activity.get_props)
-  if (Array.isArray(activity?.get_extra_props)) groups.push(activity.get_extra_props)
-  if (Array.isArray(activity?.get_pets)) groups.push(activity.get_pets)
-
-  const merged: any[] = []
-  const seen = new Set<string>()
-  for (const list of groups) {
-    for (const item of list) {
-      const start = normalizeTimestamp(item?.start_time) ?? 0
-      const end = normalizeTimestamp(item?.end_time) ?? Infinity
-      const key = `${item?.id ?? ''}|${item?.name ?? ''}|${start}|${end === Infinity ? 'inf' : end}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      merged.push(item)
-    }
-  }
-  return merged
-}
-
 function isMerchantItemActive(item: any, now: number | Date = Date.now()) {
   const nowMs = now instanceof Date ? now.getTime() : now
   const start = normalizeTimestamp(item?.start_time)
@@ -202,8 +174,7 @@ function isMerchantItemToday(item: any, now: number | Date = Date.now()) {
   const end = normalizeTimestamp(item?.end_time)
   if (start === null || end === null) return true
 
-  const startOfDay = getChinaDayStartMs(now)
-  const endOfDay = startOfDay + 24 * 60 * 60 * 1000
+  const { start: startOfDay, end: endOfDay } = currentClock().dayBounds(now instanceof Date ? now.getTime() : now)
   return start < endOfDay && end > startOfDay
 }
 
@@ -278,9 +249,9 @@ function parseMerchantSubscriptionArgs(args: string | undefined, defaultItems: s
 
 function getSubscriptionTarget(session: any) {
   const platform = session.platform || session.bot?.platform || ''
-  const privateChat = !session.guildId
+  const privateChat = isDirectSession(session)
   const channelId = session.channelId || session.guildId || session.userId || ''
-  const key = privateChat ? `private_${session.userId}` : session.guildId
+  const key = privateChat ? `private_${session.userId}` : (session.guildId || channelId)
   return { key, platform, channelId, privateChat }
 }
 
@@ -288,61 +259,48 @@ function isBotAdmin(session: any, adminUserIds: string[]) {
   return adminUserIds.includes(session?.userId || '')
 }
 
+// 订阅管理权限：群主/管理员与 Bot 管理员按独立开关生效（上游 v4.0）。
+function canManageGroupSubscription(deps: PluginDeps, session: any) {
+  return canManageSubscription(deps.config, session)
+}
+
 function sameStringArray(left: string[], right: string[]) {
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
-function getRandomGoodsMaps(res: any) {
-  const priceMap = new Map<string, string | number>()
-  const limitMap = new Map<string, string | number>()
-  const randomGoods = Array.isArray(res?.random_goods)
-    ? res.random_goods
-    : Array.isArray(res?.randomGoods)
-      ? res.randomGoods
-      : []
-
-  for (const item of randomGoods) {
-    const name = String(item?.goods_name || item?.name || '').trim()
-    if (!name) continue
-    if (item?.price !== undefined && item?.price !== null && item.price !== '') priceMap.set(name, item.price)
-    if (item?.buy_limit_num !== undefined && item?.buy_limit_num !== null && item.buy_limit_num !== '') {
-      limitMap.set(name, item.buy_limit_num)
-    }
-  }
-
-  return { priceMap, limitMap }
-}
-
 function normalizeMerchantProducts(res: any, now = new Date()): MerchantProductForRender[] {
-  return getMerchantProducts(res).map((item: any) => {
-    const name = String(item?.name || item?.goods_name || TEXT.unknown).trim() || TEXT.unknown
+  const nowMs = now.getTime()
+  const { items } = normalizeMerchant(res, nowMs)
+  return items.map((item) => {
+    const source = { start_time: item.startsAt, end_time: item.endsAt }
     return {
-      name,
-      image: String(item?.icon_url || item?.iconUrl || ''),
-      time_label: formatProductWindow(item),
-      category: classifyMerchantItem(item),
-      round_id: getRoundForItem(item, now),
-      is_active: isMerchantItemActive(item, now),
-      start_time: normalizeTimestamp(item?.start_time),
-      end_time: normalizeTimestamp(item?.end_time),
+      name: item.name,
+      image: item.icon,
+      time_label: formatProductWindow(source),
+      category: classifyMerchantItem(source),
+      round_id: getRoundForItem(source, now),
+      is_active: item.active,
+      start_time: item.startsAt,
+      end_time: item.endsAt,
+      price: item.price,
+      limit: item.limit,
+      item_category: item.category,
     }
   })
 }
 
 function buildMerchantCardItems(
   products: MerchantProductForRender[],
-  res: any,
   options: { includeEnded: boolean },
 ) {
-  const { priceMap, limitMap } = getRandomGoodsMaps(res)
   const catOrder: Record<MerchantCategoryKey, number> = { round: 0, normal: 1, weekend: 2 }
   const startY = 592
   const cardHeight = 308
   const gap = 43
 
   const goodsAll: MerchantCardItem[] = products.map((product) => {
-    const limit = limitMap.get(product.name)
-    const limitText = limit === undefined || limit === null || limit === '' ? '--' : String(limit)
+    const limit = product.limit
+    const limitText = limit === undefined || limit === null ? '--' : String(limit)
     const isHot = product.category !== 'round'
     const isEnded = options.includeEnded ? !product.is_active : false
     const roundPrefix = product.round_id ? `第${product.round_id}轮·` : ''
@@ -355,7 +313,7 @@ function buildMerchantCardItems(
     return {
       goods_name: product.name,
       iconUrl: product.image,
-      price: priceMap.get(product.name) ?? 0,
+      price: product.price ?? 0,
       num: '',
       category: product.category,
       roundId: product.round_id || 0,
@@ -476,7 +434,7 @@ function buildMerchantRenderPayload(res: any, now = new Date()) {
   const data = {
     dateStr: getMerchantDateStr(now),
     timeRange,
-    ...buildMerchantCardItems(products, res, { includeEnded: false }),
+    ...buildMerchantCardItems(products, { includeEnded: false }),
   }
   const fallback = buildMerchantFallbackText(TEXT.merchant, products, roundInfo)
 
@@ -515,7 +473,7 @@ function buildTodayMerchantRenderPayload(res: any, now = new Date()) {
     })
   const data = {
     dateStr: getMerchantDateStr(now),
-    ...buildMerchantCardItems(products, res, { includeEnded: true }),
+    ...buildMerchantCardItems(products, { includeEnded: true }),
   }
   const fallback = buildMerchantFallbackText(`今日远行商人 (${getChinaDateText(now)})`, products)
 
@@ -561,39 +519,50 @@ function useLegacyMerchantUi(deps: PluginDeps) {
 }
 
 function buildConfiguredMerchantRenderPayload(deps: PluginDeps, res: any, now = new Date()) {
-  const payload = useLegacyMerchantUi(deps)
-    ? buildLegacyMerchantRenderPayload(res, now)
-    : buildMerchantRenderPayload(res, now)
-  return {
-    ...payload,
-    templateName: useLegacyMerchantUi(deps) ? 'yuanxing-shangren' : 'yuanxing-shangren/merchant',
-  }
+  return clockScope.run(new MerchantClock(deps.config.merchantTimezone || 'Asia/Shanghai'), () => {
+    const payload = useLegacyMerchantUi(deps)
+      ? buildLegacyMerchantRenderPayload(res, now)
+      : buildMerchantRenderPayload(res, now)
+    return {
+      ...payload,
+      templateName: useLegacyMerchantUi(deps) ? 'yuanxing-shangren' : 'yuanxing-shangren/merchant',
+    }
+  })
 }
 
 function buildConfiguredTodayMerchantRenderPayload(deps: PluginDeps, res: any, now = new Date()) {
-  const payload = useLegacyMerchantUi(deps)
-    ? buildLegacyTodayMerchantRenderPayload(res, now)
-    : buildTodayMerchantRenderPayload(res, now)
-  return {
-    ...payload,
-    templateName: useLegacyMerchantUi(deps) ? 'yuanxing-shangren' : 'yuanxing-shangren/today',
-  }
+  return clockScope.run(new MerchantClock(deps.config.merchantTimezone || 'Asia/Shanghai'), () => {
+    const payload = useLegacyMerchantUi(deps)
+      ? buildLegacyTodayMerchantRenderPayload(res, now)
+      : buildTodayMerchantRenderPayload(res, now)
+    return {
+      ...payload,
+      templateName: useLegacyMerchantUi(deps) ? 'yuanxing-shangren' : 'yuanxing-shangren/today',
+    }
+  })
 }
 
-async function checkMerchantSubscriptions(deps: PluginDeps) {
+async function checkMerchantSubscriptions(deps: PluginDeps, signal?: AbortSignal) {
   const { ctx, client, merchantSubMgr, renderer, config } = deps
-  const res = await client.getMerchantInfo(ctx, true)
-  if (!res) return { subscriptions: 0, matched: 0, pushed: 0 }
+  const subs = merchantSubMgr.getAll()
+  if (!Object.keys(subs).length) return { subscriptions: 0, matched: 0, pushed: 0, kind: 'no-subscriptions' as const }
+
+  if (signal?.aborted) return { subscriptions: 0, matched: 0, pushed: 0, kind: 'cancelled' as const }
+  const res = await client.getMerchantInfo(ctx, true, { signal })
+  if (signal?.aborted) return { subscriptions: 0, matched: 0, pushed: 0, kind: 'cancelled' as const }
+  if (!res) return { subscriptions: Object.keys(subs).length, matched: 0, pushed: 0, kind: 'error' as const }
 
   const { products, roundInfo, data, fallback, templateName } = buildConfiguredMerchantRenderPayload(deps, res)
+  if (!products.length) return { subscriptions: Object.keys(subs).length, matched: 0, pushed: 0, kind: 'empty' as const }
   const productNames = products.map((p: any) => p.name || '').filter(Boolean)
-  const rendered = await renderer.renderHtml(ctx, templateName, data)
+  const rendered = await renderer.renderHtml(ctx, templateName, data, { signal })
   const renderedImage = rendered ? compressPngImage(rendered, config) : null
-  const subs = merchantSubMgr.getAll()
   let matchedCount = 0
   let pushedCount = 0
 
   for (const [key, sub] of Object.entries(subs)) {
+    if (signal?.aborted) break
+    if (JSON.stringify(merchantSubMgr.getAll()[key]) !== JSON.stringify(sub)) continue
     const matchAll = !!sub.match_all
     const matched = matchAll
       ? productNames
@@ -623,8 +592,9 @@ async function checkMerchantSubscriptions(deps: PluginDeps) {
       channelId,
       guildId: sub.group_id || '',
       userId: sub.user_id || '',
-    }, renderedImage, fallbackText, !!sub.mention_all)
-    if (!sent) continue
+      selfId: sub.self_id || '',
+    }, renderedImage, fallbackText, !!sub.mention_all, signal)
+    if (!sent || signal?.aborted || JSON.stringify(merchantSubMgr.getAll()[key]) !== JSON.stringify(sub)) continue
 
     pushedCount++
     merchantSubMgr.upsert(key, {
@@ -634,14 +604,17 @@ async function checkMerchantSubscriptions(deps: PluginDeps) {
     })
   }
 
-  return { subscriptions: Object.keys(subs).length, matched: matchedCount, pushed: pushedCount }
+  return { subscriptions: Object.keys(subs).length, matched: matchedCount, pushed: pushedCount, kind: 'success' as const }
 }
 
 export function register(deps: PluginDeps) {
+  const merchantRunner = createRunner(deps.ctx)
+  const merchantClock = new MerchantClock(deps.config.merchantTimezone || 'Asia/Shanghai')
   const { ctx, config, client, merchantSubMgr } = deps
 
   ctx.command(TEXT.merchant, '\u67e5\u770b\u8fdc\u884c\u5546\u4eba\u5546\u54c1')
     .alias('yxsr')
+    .userFields(['authority'])
     .action(async ({ session }) => {
       const res = await client.getMerchantInfo(ctx, true)
       if (!res) return `\u83b7\u53d6\u8fdc\u884c\u5546\u4eba\u6570\u636e\u5931\u8d25\uff1a${client.getLastErrorBrief()}`
@@ -652,6 +625,7 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command(TEXT.todayMerchant, '查看今日远行商人全部商品')
+    .userFields(['authority'])
     .action(async ({ session }) => {
       const res = await client.getMerchantInfo(ctx, true)
       if (!res) return `获取今日远行商人数据失败：${client.getLastErrorBrief()}`
@@ -662,9 +636,10 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command(`${TEXT.subscribe} [args:text]`, '\u8ba2\u9605\u8fdc\u884c\u5546\u4eba\u5546\u54c1\u63d0\u9192')
+    .userFields(['authority'])
     .action(async ({ session }, args) => {
       const target = getSubscriptionTarget(session)
-      if (!target.privateChat && !isBotAdmin(session, config.adminUserIds)) return '此指令仅限管理员使用。'
+      if (!target.privateChat && !canManageGroupSubscription(deps, session)) return '此指令仅限群管理员或机器人管理员使用。'
       if (target.privateChat && !config.merchantPrivateSubscriptionEnabled) return '个人私聊订阅功能已被禁用，请联系机器人管理员。'
       const parsed = parseMerchantSubscriptionArgs(args, config.merchantSubscriptionItems)
       const existing = merchantSubMgr.get(target.key)
@@ -674,6 +649,7 @@ export function register(deps: PluginDeps) {
         type: target.privateChat ? '个人订阅' : '群订阅',
         channel_id: target.channelId,
         platform: target.platform,
+        self_id: session.selfId || session.bot?.selfId || '',
         items: parsed.items,
         match_all: parsed.match_all,
         mention_all: target.privateChat ? false : parsed.mention_all,
@@ -686,9 +662,10 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command(TEXT.viewSubscribe, '\u67e5\u770b\u5f53\u524d\u4f1a\u8bdd\u7684\u8fdc\u884c\u5546\u4eba\u8ba2\u9605')
+    .userFields(['authority'])
     .action(async ({ session }) => {
       const target = getSubscriptionTarget(session)
-      if (!target.privateChat && !isBotAdmin(session, config.adminUserIds)) return '此指令仅限管理员使用。'
+      if (!target.privateChat && !canManageGroupSubscription(deps, session)) return '此指令仅限群管理员或机器人管理员使用。'
       const sub = merchantSubMgr.get(target.key)
       const scopeName = target.privateChat ? '你' : '当前群组'
       if (!sub) return `${scopeName}未订阅远行商人。\n用法：${TEXT.subscribe} [1/0] [商品名1] [商品名2] ...\n或：${TEXT.subscribe} 全部（每轮直接推送整张商人图）`
@@ -697,45 +674,61 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command(TEXT.unsubscribe, '\u53d6\u6d88\u8fdc\u884c\u5546\u4eba\u8ba2\u9605')
+    .userFields(['authority'])
     .action(async ({ session }) => {
       const target = getSubscriptionTarget(session)
-      if (!target.privateChat && !isBotAdmin(session, config.adminUserIds)) return '此指令仅限管理员使用。'
+      if (!target.privateChat && !canManageGroupSubscription(deps, session)) return '此指令仅限群管理员或机器人管理员使用。'
       merchantSubMgr.delete(target.key)
       return '\u2705 \u5df2\u53d6\u6d88\u8fdc\u884c\u5546\u4eba\u8ba2\u9605\u3002'
     })
 
   ctx.command('洛克').subcommand('.调试远行商人订阅', '立即执行一次远行商人订阅检查')
     .alias('洛克调试远行商人订阅')
+    .userFields(['authority'])
     .action(async ({ session }) => {
       if (!isBotAdmin(session, config.adminUserIds)) return '此指令仅限管理员使用。'
-      const result = await checkMerchantSubscriptions(deps)
+      const result = await merchantRunner(signal => checkMerchantSubscriptions(deps, signal))
+      if (!result) return '订阅检查正在运行或插件已停止。'
       return `远行商人订阅检查完成：订阅 ${result.subscriptions} 条，命中 ${result.matched} 条，推送 ${result.pushed} 条。`
     })
 
-  if (config.merchantSubscriptionEnabled) {
-    // 上游 v3.1.0：检查前加入 ±30s 随机延迟，降低刷新窗口和并发请求冲突。
-    const MERCHANT_JITTER_MS = 30000
-    const runCheckWithJitter = () => {
-      const jitter = Math.floor(Math.random() * MERCHANT_JITTER_MS)
-      setTimeout(() => {
-        checkMerchantSubscriptions(deps).catch(err => logger.warn(`远行商人订阅检查失败: ${err}`))
-      }, jitter)
+  const roundKey = () => {
+    const p = merchantClock.parts()
+    return p.date + ':' + Math.floor(p.hour / 4)
+  }
+  const runMerchantCheck = () => merchantRunner(async signal => {
+    const round = roundKey()
+    for (let retry = 0; retry <= 3; retry++) {
+      if (signal.aborted || (retry > 0 && roundKey() !== round)) return
+      if (!Object.keys(merchantSubMgr.getAll()).length) return
+      const result = await checkMerchantSubscriptions(deps, signal)
+      if (result.kind !== 'empty' || retry === 3) return
+      await delay(240000 + Math.floor(Math.random() * 60001) - 30000, signal)
     }
+  }).catch(err => { if (!merchantRunner.aborted()) logger.warn('远行商人订阅检查失败: ' + err) })
+
+  if (config.merchantSubscriptionEnabled) {
     if (config.merchantCheckMode === 'times' && config.merchantCheckTimes.length > 0) {
-      let lastMerchantCheckKey = ''
-      ctx.setInterval(async () => {
-        const now = new Date()
-        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-        if (!config.merchantCheckTimes.includes(timeStr)) return
-        const checkKey = `${now.toDateString()}-${timeStr}`
-        if (checkKey === lastMerchantCheckKey) return
-        lastMerchantCheckKey = checkKey
-        runCheckWithJitter()
-      }, 60000)
+      const times = config.merchantCheckTimes.filter(value => /^([01]\d|2[0-3]):[0-5]\d$/.test(value))
+      let lastWallKey = ''
+      const schedule = (after = Date.now()) => {
+        if (merchantRunner.aborted()) return
+        const target = merchantClock.nextTimeFor(times, after)
+        if (target === null) return
+        const wallKey = merchantClock.date(target) + ':' + merchantClock.timeText(target)
+        if (wallKey === lastWallKey) { schedule(target); return }
+        const jitter = Math.floor(Math.random() * 60001) - 30000
+        ctx.setTimeout(() => {
+          lastWallKey = wallKey
+          void runMerchantCheck()
+          schedule(target!)
+        }, Math.max(0, target + jitter - Date.now()))
+      }
+      schedule()
     } else {
-      ctx.setInterval(async () => {
-        runCheckWithJitter()
-      }, config.merchantCheckInterval)
+      ctx.setInterval(() => {
+        ctx.setTimeout(() => { void runMerchantCheck() }, Math.floor(Math.random() * 30001))
+      }, Math.max(30000, config.merchantCheckInterval || 300000))
     }
   }
 }

@@ -1,6 +1,8 @@
 // 家园详情（ingame pet/data）渲染数据构造（移植自上游 astrbot v3.6.1/v3.7.0）。
 // 纯函数模块，便于单元测试。
 
+import { classifyWeight } from './pet-size'
+
 export interface PetDataOptionMaps {
   natures: Record<string, string>
   bloodlines: Record<string, string>
@@ -86,26 +88,22 @@ export function petDataKgCompact(grams: any): string {
   return `${text}kg`
 }
 
-// 上游 v3.7.0：接入 Wiki 精灵体重范围，前 5% 标小块头、后 5% 标大块头。
+// 上游 v3.7.0：接入 Wiki 精灵体重范围，与查蛋共用同一判定。
 export function petDataWeightSizeInfo(pet: any, wikiPet: any): { label?: string, className?: string, hint?: string } {
   const bodySize = wikiPet && typeof wikiPet === 'object' ? wikiPet.body_size : null
   const weightRange = bodySize && typeof bodySize === 'object' ? bodySize.weight : null
   if (!weightRange || typeof weightRange !== 'object') return {}
+  if ([pet?.weight, weightRange.min_g, weightRange.max_g].some(value => value == null || value === '')) return {}
   const current = Number(pet?.weight)
   const low = Number(weightRange.min_g)
   const high = Number(weightRange.max_g)
   if (!Number.isFinite(current) || !Number.isFinite(low) || !Number.isFinite(high)) return {}
   if (high <= low) return {}
 
-  const span = high - low
-  const smallCut = low + span * 0.05
-  const largeCut = high - span * 0.05
+  const size = classifyWeight(current / 1000, low / 1000, high / 1000)
   const rangeText = `${petDataKgCompact(low)}-${petDataKgCompact(high)}`
-  if (current <= smallCut) {
-    return { label: '小块头', className: 'size-small', hint: `小块头 · ≤${petDataKgCompact(smallCut)} · 范围 ${rangeText}` }
-  }
-  if (current >= largeCut) {
-    return { label: '大块头', className: 'size-large', hint: `大块头 · ≥${petDataKgCompact(largeCut)} · 范围 ${rangeText}` }
+  if (size) {
+    return { label: size.label, className: size.css, hint: `${size.label} · ${size.css === 'size-small' ? '≤' : '≥'}${petDataKgCompact(size.threshold * 1000)} · 范围 ${rangeText}` }
   }
   return { label: '', className: '', hint: `范围 ${rangeText}` }
 }

@@ -1,4 +1,4 @@
-﻿import { Logger } from 'koishi'
+﻿import { h, Logger } from 'koishi'
 import { PluginDeps } from '../types'
 import { getPrimaryToken, notLoggedInHint } from './account'
 import { sendImageWithFallback } from '../send-image'
@@ -8,78 +8,27 @@ import {
   petDataPetIdsFromPayload,
   petDataSkillIdsFromPayload,
 } from '../pet-data-service'
+import {
+  buildPlayerView,
+  buildPlayerText,
+  playerPayloadUid,
+  mergePlayerPayloads,
+  parseIngamePlayerPayload,
+  playerField,
+  resourceUrl,
+} from '../player-service'
+import { normalizeLiveMerchant } from '../merchant-service'
+import { canManageSubscription, isDirectSession } from '../permissions'
+import { lowBandwidthRenderOptions, RenderOptions } from '../render'
+import { createRunner } from '../subscription-runner'
 import fs from 'node:fs'
 import path from 'node:path'
 
 const logger = new Logger('rocom-query')
 
-async function sendImage(deps: PluginDeps, session: any, templateName: string, data: any, fallback: string) {
-  const png = await deps.renderer.renderHtml(deps.ctx, templateName, data)
+async function sendImage(deps: PluginDeps, session: any, templateName: string, data: any, fallback: string, options?: RenderOptions) {
+  const png = await deps.renderer.renderPages(deps.ctx, templateName, data, options)
   await sendImageWithFallback(session, png, fallback, `query:${templateName}`, deps.config)
-}
-
-type IngamePlayerRow = {
-  field?: string
-  label?: string
-  value?: unknown
-}
-
-type IngamePlayerPayload = {
-  rows?: IngamePlayerRow[]
-  notes?: unknown[]
-  title?: string
-  [key: string]: any
-}
-
-function cleanPlayerFieldValue(field: string, value: unknown): string {
-  const text = String(value ?? '').trim().replace(/^'+|'+$/g, '')
-  if (!text || ['<0B>', '<0b>', '<0B >', '<0b >'].includes(text)) return '未设置'
-  if (['is_online', 'online', 'chat_top_unlock', 'is_friend', 'is_black', 'is_black_role', 'is_chat_node_unlock'].includes(field)) {
-    return ['1', 'true', 'True', '是'].includes(text) ? '是' : '否'
-  }
-  if (['sex', 'gender'].includes(field)) {
-    return { '0': '未知', '1': '男', '2': '女' }[text] || text
-  }
-  if (field === 'friend_type') {
-    return { '0': '默认', '1': '特殊' }[text] || text
-  }
-  if (field === 'battle_state') {
-    return { '0': '空闲', '1': '对战中' }[text] || text
-  }
-  return text
-}
-
-function parseIngamePlayerPayload(payload: IngamePlayerPayload | null | undefined, uid: string) {
-  const rows = payload?.rows || []
-  const rowMap: Record<string, string> = {}
-  const labelMap: Record<string, string> = {}
-
-  for (const row of rows) {
-    const field = String(row.field || '')
-    if (!field) continue
-    rowMap[field] = String(row.value ?? '')
-    labelMap[field] = String(row.label || field)
-  }
-
-  const playerUid = cleanPlayerFieldValue('uin', rowMap.uin || uid)
-  const signature = cleanPlayerFieldValue('signature', rowMap.signature || '')
-  return {
-    title: String(payload?.title || '玩家搜索'),
-    nickname: cleanPlayerFieldValue('name', rowMap.name || '-'),
-    uid: playerUid,
-    level: cleanPlayerFieldValue('level', rowMap.level || '-'),
-    signature: signature === '未设置' ? '' : signature,
-    rowMap,
-    labelMap,
-  }
-}
-
-function playerField(parsed: ReturnType<typeof parseIngamePlayerPayload> | null, field: string, defaultValue = '未设置') {
-  if (!parsed) return defaultValue
-  const raw = parsed.rowMap[field]
-  if (raw == null || raw === '') return defaultValue
-  const value = cleanPlayerFieldValue(field, raw)
-  return value && value !== '-' && value !== '未设置' ? value : defaultValue
 }
 
 function tryParseJson(text: string): unknown | null {
@@ -1188,7 +1137,7 @@ function buildHomeRenderData(deps: PluginDeps, res: any, uid: string) {
   }
 }
 
-function buildPlayerSearchRenderData(payload: any, uid: string) {
+function buildPlayerSearchRenderData(payload: any, uid: string, cardImageUrl = '') {
   const parsed = parseIngamePlayerPayload(payload, uid)
   const pack = (title: string, pairs: [string, string][]) => {
     const items = pairs
@@ -1231,7 +1180,10 @@ function buildPlayerSearchRenderData(payload: any, uid: string) {
     signature,
     showSignature: Boolean(signature),
     sections,
-    commandHint: '洛克.玩家 <UID>',
+    cardImageUrl: cardImageUrl || '',
+    collectedShining: playerField(parsed, 'collected_shining_pet_count', '未知'),
+    collectedGlass: playerField(parsed, 'collected_glass_pet_count', '未知'),
+    commandHint: '洛克.玩家 [UID]',
     copyright: 'Koishi & WeGame Locke Kingdom Plugin',
   }
 }
@@ -1240,13 +1192,32 @@ function buildShopRenderData(payload: any, shopId: string) {
   const sections: any[] = []
   const detailItems: any[] = []
   const summaryCards: any[] = [{ label: '商店 ID', value: shopId }]
-  if (Array.isArray(payload?.rows)) {
+  const shop = payload?.shop || {}
+  if (Array.isArray(payload?.goods)) {
+    const items = normalizeLiveMerchant(payload)
+    summaryCards.push({ label: '商品数量', value: String(items.length) })
+    const shopName = String(shop.name || shop.title || '').trim()
+    if (shopName) summaryCards.push({ label: '商店名称', value: shopName })
+    sections.push({
+      title: '商品列表',
+      cards: items.map((item) => ({
+        title: item.name,
+        image: item.icon,
+        meta: [
+          item.price !== null ? { label: '价格', value: String(item.price) } : null,
+          item.limit !== null ? { label: '限购', value: String(item.limit) } : null,
+          item.active ? null : { label: '状态', value: '非在售' },
+        ].filter(Boolean),
+      })),
+    })
+  } else if (Array.isArray(payload?.rows)) {
     detailItems.push(...payload.rows.filter((row: any) => Number(row.level || 0) === 0).map((row: any) => ({
       label: row.label || row.field || '-',
       value: stringifyInspectValue(row.value),
     })))
   } else {
     for (const [key, value] of Object.entries(payload || {})) {
+      if (['_source', 'goods', 'shop', 'meta', '_goods_mapping', 'goods_mapping'].includes(key)) continue
       if (Array.isArray(value)) {
         summaryCards.push({ label: key, value: String(value.length) })
         sections.push({
@@ -1269,12 +1240,12 @@ function buildShopRenderData(payload: any, shopId: string) {
     title: '洛克商店',
     subtitle: `shop_id = ${shopId}`,
     heroTitle: '商店查询',
-    heroValue: detailItems.find(item => ['name', 'title', '名称', '标题'].includes(item.label))?.value || shopId,
+    heroValue: String(shop.name || shop.title || '') || detailItems.find(item => ['name', 'title', '名称', '标题'].includes(item.label))?.value || shopId,
     heroSubvalue: `shop_id = ${shopId}`,
     summaryCards: summaryCards.slice(0, 3),
     sections,
     detailItems: detailItems.slice(0, 18),
-    commandHint: '洛克.商店 <shop_id>',
+    commandHint: '洛克.商店 [shop_id]',
     copyright: 'Koishi & WeGame Locke Kingdom Plugin',
   }
 }
@@ -1352,7 +1323,7 @@ function sessionTarget(session: any) {
   return {
     platform: session?.platform || session?.bot?.platform || '',
     channelId: session?.channelId || session?.guildId || '',
-    userId: session?.guildId ? '' : (session?.userId || ''),
+    userId: isDirectSession(session) ? (session?.userId || '') : '',
   }
 }
 
@@ -1363,6 +1334,10 @@ function homeSubscriptionKey(session: any, uid: string, kind: 'garden' | 'inspir
 
 function isBotAdmin(session: any, adminUserIds: string[]) {
   return adminUserIds.includes(session?.userId || '')
+}
+
+function canManageGroupSubscription(deps: PluginDeps, session: any) {
+  return canManageSubscription(deps.config, session)
 }
 
 async function resolveHomeUid(deps: PluginDeps, session: any, uid = '') {
@@ -1394,20 +1369,25 @@ const HOME_SUB_TEXT: Record<'garden' | 'inspiration' | 'egg', { kindText: string
 
 async function subscribeHome(deps: PluginDeps, session: any, uid: string, kind: 'garden' | 'inspiration' | 'egg') {
   const target = sessionTarget(session)
-  if (!target.userId && !isBotAdmin(session, deps.config.adminUserIds)) return '此指令仅限管理员使用。'
+  if (!target.userId && !canManageGroupSubscription(deps, session)) return '此指令仅限群管理员或机器人管理员使用。'
   const targetUid = await resolveHomeUid(deps, session, uid)
   if (!targetUid) return HOME_SUB_TEXT[kind].needUidHint
   const key = homeSubscriptionKey(session, targetUid, kind)
+  const own = deps.userMgr.getUserBindings(session?.userId || '').find(binding => binding.role_id === targetUid)
+  const existing = deps.homeSubMgr.getAll()[key]
   deps.homeSubMgr.upsert(key, {
     key,
     kind,
     uid: targetUid,
+    notify_user_id: own ? session.userId : '',
+    nickname: own?.nickname || '',
     platform: target.platform,
+    self_id: session?.selfId || session?.bot?.selfId || '',
     channel_id: target.channelId,
     guild_id: session?.guildId || '',
     user_id: target.userId,
     updated_by: session?.userId || '',
-    notify_state: {},
+    notify_state: existing?.notify_state || {},
     updated_at: Math.floor(Date.now() / 1000),
   })
   return `已订阅 UID ${targetUid} ${HOME_SUB_TEXT[kind].subscribedHint}`
@@ -1442,24 +1422,27 @@ function homeSubscriptionMessage(uid: string, kind: 'garden' | 'inspiration' | '
   ].filter(Boolean).join('\n')
 }
 
-async function checkHomeSubscriptions(deps: PluginDeps) {
+async function checkHomeSubscriptions(deps: PluginDeps, signal?: AbortSignal) {
   const subs = deps.homeSubMgr.getAll()
   const cache = new Map<string, any>()
   let checkedCount = 0
   let pushedCount = 0
   for (const [key, sub] of Object.entries(subs)) {
+    if (signal?.aborted) break
     if (!sub.uid || !['garden', 'inspiration', 'egg'].includes(sub.kind)) continue
     checkedCount++
     if (!cache.has(sub.uid)) {
-      cache.set(sub.uid, await deps.client.ingameHomeInfo(deps.ctx, sub.uid, { timeoutMs: 30000 }))
+      cache.set(sub.uid, await deps.client.ingameHomeInfo(deps.ctx, sub.uid, { timeoutMs: 30000, signal }))
     }
+    if (signal?.aborted) break
+    if (JSON.stringify(deps.homeSubMgr.getAll()[key]) !== JSON.stringify(sub)) continue
     const res = cache.get(sub.uid)
     if (!res) continue
     const data = buildHomeRenderData(deps, res, sub.uid)
     const { items, readyItems, names } = homeSubscriptionState(data, sub.kind)
     const totalCount = items.length
     if (totalCount <= 0) continue
-    const notifyState = sub.notify_state || {}
+    const notifyState = { ...sub.notify_state }
     const pushLevels: ('first' | 'all')[] = []
     if (!readyItems.length) {
       notifyState.first = false
@@ -1473,15 +1456,19 @@ async function checkHomeSubscriptions(deps: PluginDeps) {
       deps.homeSubMgr.upsert(key, { ...sub, notify_state: notifyState })
       continue
     }
-    const messages = pushLevels.map(level => homeSubscriptionMessage(sub.uid, sub.kind, level, totalCount, readyItems, names))
+    const owned = deps.userMgr.getUserBindings(sub.updated_by).find(binding => binding.role_id === sub.uid)
+    const label = owned?.nickname || sub.uid
+    const notifyUser = owned && sub.notify_user_id === sub.updated_by ? sub.notify_user_id : ''
+    const messages = pushLevels.map(level => homeSubscriptionMessage(label, sub.kind, level, totalCount, readyItems, names))
     try {
       const sent = await sendScheduledMessage(deps.ctx, {
         platform: sub.platform,
         channelId: sub.channel_id || sub.guild_id || sub.user_id || '',
         guildId: sub.guild_id || '',
         userId: sub.user_id || '',
-      }, messages.join('\n\n'))
-      if (!sent) continue
+        selfId: sub.self_id || '',
+      }, !sub.user_id && notifyUser ? [h.at(notifyUser), h.text('\n' + messages.join('\n\n'))] : messages.join('\n\n'), signal)
+      if (!sent || signal?.aborted || JSON.stringify(deps.homeSubMgr.getAll()[key]) !== JSON.stringify(sub)) continue
     } catch (e) {
       logger.warn(`家园订阅推送失败: ${e}`)
       continue
@@ -1495,6 +1482,7 @@ async function checkHomeSubscriptions(deps: PluginDeps) {
 
 export function register(deps: PluginDeps) {
   const { ctx, client } = deps
+  const homeRunner = createRunner(ctx)
 
   ctx.command('洛克').subcommand('.档案', '查看个人档案')
     .alias('洛克档案')
@@ -1521,8 +1509,10 @@ export function register(deps: PluginDeps) {
       const cl = collRes || {}
       const bo = boRes || {}
       const recentBattle = blRes?.battles?.[0]
-      const playerSearchRes = role?.id ? await client.ingamePlayerSearch(ctx, String(role.id)) : null
-      const playerSearchData = parseIngamePlayerPayload(playerSearchRes, String(role.id || ''))
+      const auth = { fwToken, userIdentifier }
+      const playerSearchRes = role?.id ? await client.ingamePlayerSearch(ctx, String(role.id), { auth }) : null
+      const playerCardRes = role?.id ? await client.ingamePlayerCard(ctx, String(role.id), { auth }).catch(() => null) : null
+      const playerSearchData = parseIngamePlayerPayload(mergePlayerPayloads(playerSearchRes, playerCardRes), String(role.id || ''))
       const profileSignature = playerSearchData?.signature || ''
       const profileHeadTags = playerSearchData ? [
         { label: '在线', value: playerField(playerSearchData, 'online', '未知') },
@@ -1541,7 +1531,7 @@ export function register(deps: PluginDeps) {
         { label: '名片皮肤', value: playerField(playerSearchData, 'card_skin_selected') },
         { label: '名片头像', value: playerField(playerSearchData, 'card_icon_selected') },
       ].filter((item) => item.value && item.value !== '-' && item.value !== '未设置') : []
-      const profileCardImage = playerSearchData ? playerField(playerSearchData, 'card_bussiness_card_url', '') : ''
+      const profileCardImage = playerSearchData ? resourceUrl(playerField(playerSearchData, 'card_bussiness_card_url', ''), deps.config.apiBaseUrl) : ''
       const profileStatusText = playerSearchData ? playerField(playerSearchData, 'online', '未知') : '未知'
       const hasExtraProfileData = Boolean(profileSignature || profileHomeItems.length || profileCardItems.length || profileCardImage)
 
@@ -1933,13 +1923,40 @@ export function register(deps: PluginDeps) {
       await sendImage(deps, session, 'exchange-hall', data, `【交换大厅】第${page}页`)
     })
 
-  ctx.command('洛克').subcommand('.玩家 <uid:string>', '通过 ingame 接口查询玩家基础资料')
+  ctx.command('洛克').subcommand('.玩家 [uid:string]', '通过 ingame 接口查询玩家资料')
     .alias('洛克玩家')
-    .action(async ({ session }, uid) => {
-      if (!uid) return '请提供玩家 UID。用法：洛克.玩家 <UID>'
-      const res = await client.ingamePlayerSearch(ctx, uid)
-      if (!res) return `玩家搜索失败：${client.getLastErrorBrief()}`
-      await sendImage(deps, session, 'player-search', buildPlayerSearchRenderData(res, uid), `【洛克玩家】UID ${uid}`)
+    .action(async ({ session }, uid = '') => {
+      const userId = session!.userId!
+      const explicitUid = String(uid || '').trim()
+      const binding = deps.userMgr.getPrimaryBinding(userId)
+      const targetUid = explicitUid || String(binding?.role_id || '')
+      const fwToken = await getPrimaryToken(deps, userId)
+      if (!targetUid && !fwToken) {
+        return '请提供玩家 UID，或先使用“洛克.QQ登录 / 洛克.微信登录”完成绑定。用法：洛克.玩家 [UID]'
+      }
+
+      const auth = { fwToken, userIdentifier: userId }
+      const search = await client.ingamePlayerSearch(ctx, targetUid, { auth })
+      if (!search) return `玩家搜索失败：${client.getLastErrorBrief()}`
+
+      // 显式 UID 与搜索返回 UID 不一致时不合并名片，避免混用两个角色数据。
+      const returnedUid = String(search?.player_info?.uin ?? search?.player_info?.uid ?? search?.uin ?? search?.uid ?? '')
+      const uidConsistent = !explicitUid || !returnedUid || returnedUid === explicitUid
+      let card = uidConsistent
+        ? await client.ingamePlayerCard(ctx, targetUid, { auth }).catch(() => null)
+        : null
+      const cardUid = playerPayloadUid(card)
+      if (cardUid && (targetUid || returnedUid) && cardUid !== (targetUid || returnedUid)) card = null
+
+      const view = buildPlayerView(search, card, targetUid, deps.config.apiBaseUrl)
+      const merged = mergePlayerPayloads(search, card)
+      await sendImage(
+        deps,
+        session,
+        'player-search',
+        buildPlayerSearchRenderData(merged, targetUid || view.parsed.uid, view.cardImageUrl),
+        buildPlayerText(merged, targetUid || view.parsed.uid),
+      )
     })
 
   ctx.command('洛克').subcommand('.家园 [uid:string]', '通过 UID 查询家园菜园、守卫和室内精灵')
@@ -1950,10 +1967,12 @@ export function register(deps: PluginDeps) {
         const binding = deps.userMgr.getPrimaryBinding(session!.userId!)
         targetUid = String(binding?.role_id || '')
       }
-      if (!targetUid) return '请提供玩家 UID，或先完成绑定后使用 洛克.家园。'
+      const fwToken = await getPrimaryToken(deps, session!.userId!)
+      if (!targetUid && !fwToken) return '请提供玩家 UID，或先完成绑定后使用 洛克.家园。'
 
       let queuedNotified = false
       const res = await client.ingameHomeInfo(ctx, targetUid, {
+        auth: { fwToken, userIdentifier: session!.userId! },
         waitMs: deps.config.homeQueryWaitMs,
         intervalMs: deps.config.homeQueryPollIntervalMs,
         timeoutMs: deps.config.homeQueryTimeoutMs,
@@ -2051,7 +2070,10 @@ export function register(deps: PluginDeps) {
       fallbackLines.push('若服务器带宽过小导致生成超时，请在配置项打开低带宽模式。')
       fallbackLines.push('低带宽模式开启后，家园详情将不再加载技能图标。')
 
-      await sendImage(deps, session, 'pet-data', data, fallbackLines.join('\n'))
+      await sendImage(deps, session, 'pet-data', data, fallbackLines.join('\n'), {
+        ...(lowBandwidth ? lowBandwidthRenderOptions : {}),
+        timeoutMs: deps.config.renderTimeout || 30000,
+      })
     })
 
   ctx.command('洛克').subcommand('.刷新面板 [uid:string]', '刷新指定 UID 的精灵面板缓存')
@@ -2137,13 +2159,14 @@ export function register(deps: PluginDeps) {
       await sendImage(deps, session, 'pet-panel-detail', data, fallback)
     })
 
-  ctx.command('洛克').subcommand('.商店 <shopId:string>', '通过 ingame 接口查询商店信息')
+  ctx.command('洛克').subcommand('.商店 [shopId:string]', '通过 ingame 接口查询商店信息，默认商店 3009')
     .alias('洛克商店')
-    .action(async ({ session }, shopId) => {
-      if (!shopId) return '请提供商店 ID。用法：洛克.商店 <shop_id>'
-      const res = await client.ingameMerchantInfo(ctx, shopId)
+    .action(async ({ session }, shopId = '3009') => {
+      const targetShopId = String(shopId || '3009').trim() || '3009'
+      if (!/^\d+$/.test(targetShopId)) return '商店 ID 必须是数字。用法：洛克.商店 [shop_id]，默认 3009'
+      const res = await client.ingameMerchantInfo(ctx, targetShopId)
       if (!res) return `商店查询失败：${client.getLastErrorBrief()}`
-      await sendImage(deps, session, 'ingame-shop', buildShopRenderData(res, shopId), `【洛克商店】shop_id=${shopId}`)
+      await sendImage(deps, session, 'ingame-shop', buildShopRenderData(res, targetShopId), `【洛克商店】shop_id=${targetShopId}`)
     })
 
   ctx.command('洛克').subcommand('.好友关系 <userIds:string>', '查询好友关系')
@@ -2158,18 +2181,22 @@ export function register(deps: PluginDeps) {
     })
 
   ctx.command('订阅家园菜园 [uid:string]', '订阅指定 UID 的家园菜园成熟提醒')
+    .userFields(['authority'])
     .action(async ({ session }, uid = '') => subscribeHome(deps, session, uid, 'garden'))
 
   ctx.command('订阅家园灵感 [uid:string]', '订阅指定 UID 的家园精灵灵感完成提醒')
+    .userFields(['authority'])
     .action(async ({ session }, uid = '') => subscribeHome(deps, session, uid, 'inspiration'))
 
   ctx.command('订阅家园生蛋 [uid:string]', '订阅指定 UID 的家园精灵生蛋提醒')
+    .userFields(['authority'])
     .action(async ({ session }, uid = '') => subscribeHome(deps, session, uid, 'egg'))
 
   ctx.command('取消订阅家园 [kind:string] [uid:string]', '取消当前会话的家园订阅')
+    .userFields(['authority'])
     .action(async ({ session }, kind = '全部', uid = '') => {
       const target = sessionTarget(session)
-      if (!target.userId && !isBotAdmin(session, deps.config.adminUserIds)) return '此指令仅限管理员使用。'
+      if (!target.userId && !canManageGroupSubscription(deps, session)) return '此指令仅限群管理员或机器人管理员使用。'
       const kindMap: Record<string, string> = { '菜园': 'garden', '灵感': 'inspiration', '生蛋': 'egg', '全部': '', all: '', garden: 'garden', inspiration: 'inspiration', egg: 'egg' }
       const deleted = deps.homeSubMgr.deleteMatching(target, kindMap[String(kind || '全部')] ?? '', String(uid || '').trim())
       return deleted ? `已取消 ${deleted} 条家园订阅。` : '当前会话没有匹配的家园订阅。'
@@ -2179,11 +2206,12 @@ export function register(deps: PluginDeps) {
     .alias('洛克调试家园订阅')
     .action(async ({ session }) => {
       if (!isBotAdmin(session, deps.config.adminUserIds)) return '此指令仅限管理员使用。'
-      const result = await checkHomeSubscriptions(deps)
+      const result = await homeRunner(signal => checkHomeSubscriptions(deps, signal))
+      if (!result) return '订阅检查正在运行或插件已停止。'
       return `家园订阅检查完成：订阅 ${result.subscriptions} 条，检查 ${result.checked} 条，推送 ${result.pushed} 档提醒。`
     })
 
   if (deps.config.homeSubscriptionEnabled) {
-    ctx.setInterval(() => checkHomeSubscriptions(deps).catch(err => logger.warn(`家园订阅检查失败: ${err}`)), Math.max(1, deps.config.homeSubscriptionIntervalMinutes || 5) * 60000)
+    ctx.setInterval(() => homeRunner(signal => checkHomeSubscriptions(deps, signal)).catch(err => logger.warn(`家园订阅检查失败: ${err}`)), Math.max(1, deps.config.homeSubscriptionIntervalMinutes || 5) * 60000)
   }
 }

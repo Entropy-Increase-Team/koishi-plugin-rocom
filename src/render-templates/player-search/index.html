@@ -39,6 +39,13 @@
     </section>
     {{/if}}
 
+    {{if collectedShining !== undefined || collectedGlass !== undefined}}
+    <section class="summary-strip">
+      <div class="summary-item">异色收集：{{collectedShining || '0'}}</div>
+      <div class="summary-item">炫彩收集：{{collectedGlass || '0'}}</div>
+    </section>
+    {{/if}}
+    {{if cardImageUrl}}<section class="signature-strip"><img src="{{cardImageUrl}}" style="max-width:100%;height:auto" onerror="this.style.display='none'" alt="名片"></section>{{/if}}
     <main class="content-grid">
       {{each sections section}}
       <section class="panel">

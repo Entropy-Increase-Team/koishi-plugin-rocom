@@ -133,18 +133,18 @@ export function register(deps: PluginDeps) {
 
         if (height != null && weight != null) {
           const heightInMeters = heightMeters ?? height / 100
-          const backendResults = await client.queryPetSize(
-            ctx,
-            heightInMeters,
-            weight,
-            'magic',
-            1,
-            30,
-            session?.userId || '',
-          )
-          if (backendResults) {
-            data = eggService.buildSizeSearchDataFromApi(height, weight, backendResults, heightDisplay)
-            fallback = eggService.buildSizeSearchTextFromApi(height, weight, backendResults, heightDisplay)
+          const userId = session?.userId || ''
+          // 后端查蛋优先，失败后回退 Wiki 尺寸接口，再回退本地引擎。成功空集不回退。
+          const eggApiResults = await client.searchEggBySize(ctx, heightInMeters, weight, 1, 30, userId)
+          if (eggApiResults) {
+            data = eggService.buildSizeSearchDataFromApi(height, weight, eggApiResults, heightDisplay)
+            fallback = eggService.buildSizeSearchTextFromApi(height, weight, eggApiResults, heightDisplay)
+          } else {
+            const wikiResults = await client.queryPetSize(ctx, heightInMeters, weight, 'magic', 1, 30, userId)
+            if (wikiResults) {
+              data = eggService.buildSizeSearchDataFromApi(height, weight, wikiResults, heightDisplay)
+              fallback = eggService.buildSizeSearchTextFromApi(height, weight, wikiResults, heightDisplay)
+            }
           }
         }
 
@@ -160,6 +160,56 @@ export function register(deps: PluginDeps) {
 
       const name = nameParts.join(' ')
       if (!name) return '请输入精灵名称。用法：洛克.查蛋 <精灵名>'
+
+      // 后端查蛋优先（上游 v3.8.0）：pet-groups → group-pets，接口不可用才回退 Wiki。
+      const userId = session?.userId || ''
+      const eggCandidatesRes = await client.getEggPetGroups(ctx, name, 20, userId)
+      if (eggCandidatesRes !== null) {
+        const eggCandidates = Array.isArray(eggCandidatesRes)
+          ? eggCandidatesRes
+          : (Array.isArray(eggCandidatesRes?.items) ? eggCandidatesRes.items : [])
+        if (!eggCandidates.length) return `未找到名为「${name}」的精灵，请检查名称后重试。`
+
+        let selected = eggCandidates.find((item: any) => {
+          const itemName = String(item?.name || '').trim()
+          const itemForm = String(item?.form || '').trim()
+          const display = itemForm && !itemName.includes(itemForm) ? `${itemName}（${itemForm}）` : itemName
+          return String(item?.id || '') === name
+            || itemName === name
+            || display === name
+            || (itemForm && `${itemName}${itemForm}` === name)
+        })
+        if (!selected && eggCandidates.length === 1) selected = eggCandidates[0]
+        if (!selected) {
+          const data = eggService.buildCandidatesFromEggApi(name, eggCandidates)
+          const candidateText = [
+            `找到多个查蛋候选（${eggCandidates.length}），请使用更精确名称：`,
+            ...eggCandidates.slice(0, 10).map((item: any, index: number) => `${index + 1}. ${item?.name || '未知精灵'} #${item?.id || '-'}`),
+          ].join('\n')
+          await sendEggImage(deps, session, 'searcheggs/candidates', data, candidateText)
+          return
+        }
+
+        const compatibleByGroup: Record<string, any> = {}
+        const groupIds: any[] = []
+        for (const group of selected?.egg_groups || []) {
+          if (!group || typeof group !== 'object') continue
+          const groupId = group.group_id || group.id
+          if (groupId) groupIds.push(groupId)
+        }
+        if (groupIds.length) {
+          compatibleByGroup['__all__'] = await client.getEggGroupPets(ctx, groupIds, 'any', 1, 1, userId) || {}
+        }
+        for (const group of selected?.egg_groups || []) {
+          if (!group || typeof group !== 'object') continue
+          const groupId = group.group_id || group.id
+          if (!groupId) continue
+          compatibleByGroup[String(groupId)] = await client.getEggGroupPets(ctx, [groupId], 'any', 1, 60, userId) || {}
+        }
+        const data = eggService.buildSearchDataFromEggApi(selected, compatibleByGroup)
+        await sendEggImage(deps, session, 'searcheggs', data, eggService.buildSearchTextFromWiki(data))
+        return
+      }
 
       let backendDetail: any = null
       let backendProfile: any = null

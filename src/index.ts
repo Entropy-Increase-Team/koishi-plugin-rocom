@@ -21,6 +21,8 @@ import { register as registerWiki } from './commands/wiki'
 import { register as registerEgg } from './commands/egg'
 import { register as registerTools } from './commands/tools'
 import { register as registerAdmin } from './commands/admin'
+import { register as registerRanking } from './commands/ranking'
+import { register as registerShareCode } from './commands/share-code'
 import { sendImageWithFallback } from './send-image'
 
 export const name = 'rocom'
@@ -64,10 +66,10 @@ const MENU_GROUPS: MenuGroup[] = [
       { cmd: '洛克.阵容', desc: '查看阵容推荐' },
       { cmd: '查看阵容', desc: '查看阵容详情' },
       { cmd: '洛克.交换大厅', desc: '查看交换大厅' },
-      { cmd: '洛克.玩家', desc: '查询 ingame 玩家资料' },
+      { cmd: '洛克.玩家', desc: '查询 ingame 玩家资料（可选 UID）' },
       { cmd: '洛克.家园', desc: '查询家园菜园' },
       { cmd: '洛克.家园详情', desc: '家园精灵完整数据' },
-      { cmd: '洛克.商店', desc: '查询 ingame 商店' },
+      { cmd: '洛克.商店', desc: '查询 ingame 商店（默认 3009）' },
       { cmd: '洛克.日历', desc: '查看活动日历' },
       { cmd: '洛克.公告', desc: '查看公告列表' },
       { cmd: '洛克.好友关系', desc: '查询好友关系' },
@@ -97,6 +99,10 @@ const MENU_GROUPS: MenuGroup[] = [
       { cmd: '图鉴下载', desc: '下载图鉴缓存(管理员)' },
       { cmd: '洛克.查蛋', desc: '精灵查蛋 / 尺寸反查' },
       { cmd: '洛克.配种', desc: '配种查询' },
+      { cmd: '异色排行榜', desc: '异色精灵收集排行 [UID] [数量]' },
+      { cmd: '炫彩排行榜', desc: '炫彩精灵收集排行 [UID] [数量]' },
+      { cmd: '阵容码 解析', desc: '解析阵容分享码或链接' },
+      { cmd: '阵容码 查询', desc: '查询阵容分享码历史' },
     ],
   },
 ]
@@ -135,6 +141,10 @@ export interface Config {
   merchantCheckMode: 'interval' | 'times'
   merchantCheckInterval: number
   merchantCheckTimes: string[]
+  merchantTimezone: string
+  subscriptionGroupAdminEnabled: boolean
+  subscriptionBotAdminEnabled: boolean
+  subscriptionBotAdminAuthority: number
   homeSubscriptionEnabled: boolean
   homeSubscriptionIntervalMinutes: number
   announcementSubscriptionEnabled: boolean
@@ -143,6 +153,7 @@ export interface Config {
   homeQueryPollIntervalMs: number
   homeQueryTimeoutMs: number
   lowBandwidthMode: boolean
+  renderTimeout: number
   atlasZipUrls: string[]
   atlasGitUrl: string
   imageCompressionEnabled: boolean
@@ -171,7 +182,11 @@ export const Config: Schema<Config> = Schema.intersect([
     merchantCheckMode: Schema.union(['interval', 'times'] as const).default('interval').description('商人检查模式：interval 定期轮询 / times 指定时间点'),
     merchantCheckInterval: Schema.number().default(300000).description('商人检查间隔，单位毫秒（仅 interval 模式生效）'),
     merchantCheckTimes: Schema.array(String).default([]).description('商人定时检查时间点（HH:MM 格式，如 08:00，仅 times 模式生效）'),
+    merchantTimezone: Schema.string().default('Asia/Shanghai').description('远行商人时区（IANA 名称，如 Asia/Shanghai；默认 UTC+8）'),
     merchantPrivateSubscriptionEnabled: Schema.boolean().default(true).description('允许个人私聊订阅远行商人推送'),
+    subscriptionGroupAdminEnabled: Schema.boolean().default(true).description('允许群主/管理员管理当前群订阅（对应上游 merchant_group_admin_enabled）'),
+    subscriptionBotAdminEnabled: Schema.boolean().default(true).description('允许白名单/高权限 Bot 管理员管理订阅（对应上游 merchant_bot_admin_enabled）'),
+    subscriptionBotAdminAuthority: Schema.number().default(4).description('Bot 管理员 authority 阈值；达到该值即视为 Bot 管理员'),
     homeSubscriptionEnabled: Schema.boolean().default(true).description('启用家园菜园和灵感订阅推送'),
     homeSubscriptionIntervalMinutes: Schema.number().default(5).description('家园订阅检查间隔，单位分钟'),
     announcementSubscriptionEnabled: Schema.boolean().default(true).description('启用洛克公告订阅推送'),
@@ -182,6 +197,7 @@ export const Config: Schema<Config> = Schema.intersect([
     homeQueryPollIntervalMs: Schema.number().default(3000).description('家园查询进入排队后的轮询间隔，单位毫秒'),
     homeQueryTimeoutMs: Schema.number().default(180000).description('家园查询排队等候的总超时，单位毫秒，超时后提示稍后重试'),
     lowBandwidthMode: Schema.boolean().default(false).description('低带宽模式：家园详情不再加载技能图标，降低长图生成压力'),
+    renderTimeout: Schema.number().default(30000).description('单次渲染总超时，单位毫秒（导航、资源等待与截图共享截止时间）'),
   }).description('家园查询排队设置'),
   Schema.object({
     atlasZipUrls: Schema.array(String).default([
@@ -201,7 +217,7 @@ export function apply(ctx: Context, config: Config) {
   const homeSubMgr = new HomeSubscriptionManager(dataDir)
   const announcementSubMgr = new AnnouncementSubscriptionManager(dataDir)
   const resPath = path.resolve(__dirname, '..')
-  const renderer = new Renderer(resPath)
+  const renderer = new Renderer(resPath, { timeoutMs: config.renderTimeout || 30000 })
   const renderTemplateRoot = fs.existsSync(path.join(resPath, 'lib', 'render-templates'))
     ? path.join(resPath, 'lib', 'render-templates')
     : path.join(resPath, 'src', 'render-templates')
@@ -235,4 +251,6 @@ export function apply(ctx: Context, config: Config) {
   registerEgg(deps)
   registerTools(deps)
   registerAdmin(deps)
+  registerRanking(deps)
+  registerShareCode(deps)
 }

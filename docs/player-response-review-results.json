@@ -1,0 +1,79 @@
+{
+  "scope": "local supplied JSON examples; mocked HTTP; no production requests or messages",
+  "summary": {
+    "total": 9,
+    "passed": 7,
+    "failed": 2
+  },
+  "results": [
+    {
+      "name": "search/http-envelope-and-nested-player",
+      "passed": true
+    },
+    {
+      "name": "card/http-envelope-and-nested-card",
+      "passed": true
+    },
+    {
+      "name": "search/basic-home-and-offline-values",
+      "passed": true
+    },
+    {
+      "name": "card/merge-collection-avatar-skin-and-signature",
+      "passed": true
+    },
+    {
+      "name": "card/no-uid-preserves-search-context",
+      "passed": true
+    },
+    {
+      "name": "card/relative-marker-is-not-a-url-directory",
+      "passed": false
+    },
+    {
+      "name": "search/relative-marker-is-not-a-url-directory",
+      "passed": false
+    },
+    {
+      "name": "player/template-receives-new-collection-fields",
+      "passed": true
+    },
+    {
+      "name": "formatted-business-payload-in-completed-task",
+      "passed": true
+    }
+  ],
+  "observations": {
+    "lastLogoutShownAsRawTimestamp": true,
+    "cardHasExplicitUid": false,
+    "readFields": [
+      "uin",
+      "name",
+      "level",
+      "online",
+      "sex",
+      "gender",
+      "signature",
+      "home_name",
+      "home_level",
+      "room_level",
+      "home_experience",
+      "home_comfort_level",
+      "visitor_num",
+      "world_level",
+      "card_handbook_collect_num",
+      "last_logout_time",
+      "collected_shining_pet_count",
+      "collected_glass_pet_count",
+      "card_skin_selected",
+      "card_icon_selected",
+      "card_bussiness_card_url"
+    ],
+    "additionalUnmappedCardFields": [
+      "card_fashion_bond_collect_num",
+      "card_label_first_selected",
+      "card_label_last_selected",
+      "card_music_id"
+    ]
+  }
+}

@@ -1,0 +1,187 @@
+{
+  "date": "2026-09-21",
+  "scope": "offline source tests; synthetic fixtures, no production API",
+  "summary": {
+    "total": 44,
+    "passed": 44,
+    "failed": 0
+  },
+  "results": [
+    {
+      "name": "rank/default-and-limit",
+      "pass": true
+    },
+    {
+      "name": "share/plus-and-two-percent-decodes",
+      "pass": true
+    },
+    {
+      "name": "share/record-and-placeholder-slots",
+      "pass": true
+    },
+    {
+      "name": "merchant/free-price-and-zero-limit",
+      "pass": true
+    },
+    {
+      "name": "merchant/empty-live-does-not-fallback",
+      "pass": true
+    },
+    {
+      "name": "clock/utc-process-shanghai-time",
+      "pass": true
+    },
+    {
+      "name": "player/zero-false-and-relative-resource",
+      "pass": true
+    },
+    {
+      "name": "task/normal-completion-and-mapping",
+      "pass": true
+    },
+    {
+      "name": "task/failed-state-must-not-return-business-data",
+      "pass": true
+    },
+    {
+      "name": "task/queued-title-must-continue-polling",
+      "pass": true
+    },
+    {
+      "name": "task/202-without-task-id-is-error",
+      "pass": true
+    },
+    {
+      "name": "task/nested-result-data-retains-mapping",
+      "pass": true
+    },
+    {
+      "name": "player/token-only-can-submit-request",
+      "pass": true
+    },
+    {
+      "name": "player/legacy-rows-plus-card-retains-new-fields",
+      "pass": true
+    },
+    {
+      "name": "player/template-shows-collection-and-card",
+      "pass": true
+    },
+    {
+      "name": "permissions/koishi-user-authority-is-read",
+      "pass": true
+    },
+    {
+      "name": "permissions/non-admin-role-not-substring-matched",
+      "pass": true
+    },
+    {
+      "name": "permissions/group-without-guild-not-treated-as-private",
+      "pass": true
+    },
+    {
+      "name": "send/explicit-bot-must-send-group-message",
+      "pass": true
+    },
+    {
+      "name": "send/empty-message-ids-must-not-mark-success",
+      "pass": true
+    },
+    {
+      "name": "egg/size-api-correct-threshold-and-text",
+      "pass": true
+    },
+    {
+      "name": "egg/template-shows-size-label",
+      "pass": true
+    },
+    {
+      "name": "egg/missing-range-does-not-become-zero",
+      "pass": true
+    },
+    {
+      "name": "egg/compatible-total-uses-backend-union-total",
+      "pass": true
+    },
+    {
+      "name": "share/text-fallback-includes-talents",
+      "pass": true
+    },
+    {
+      "name": "merchant/disposal-stops-inflight-send",
+      "pass": true
+    },
+    {
+      "name": "render/deadline-includes-screenshot",
+      "pass": true
+    },
+    {
+      "name": "task/failed-after-polling-never-returns-data",
+      "pass": true
+    },
+    {
+      "name": "task/deadline-cancels-initial-submission",
+      "pass": true
+    },
+    {
+      "name": "task/completed-empty-result-is-error",
+      "pass": true
+    },
+    {
+      "name": "task/legacy-business-rows-are-not-unwrapped-as-task",
+      "pass": true
+    },
+    {
+      "name": "clock/dst-day-is-23-or-25-hours",
+      "pass": true
+    },
+    {
+      "name": "clock/plugin-instances-use-own-zone",
+      "pass": true
+    },
+    {
+      "name": "runner/no-overlap-and-stops-after-disposal",
+      "pass": true
+    },
+    {
+      "name": "send/two-bots-route-by-self-id",
+      "pass": true
+    },
+    {
+      "name": "egg/local-size-fallback-retains-variant",
+      "pass": true
+    },
+    {
+      "name": "player/mismatched-card-does-not-overwrite-player",
+      "pass": true
+    },
+    {
+      "name": "announcement/untrusted-html-and-complete-text",
+      "pass": true
+    },
+    {
+      "name": "announcement/failed-send-does-not-advance-cursor",
+      "pass": true
+    },
+    {
+      "name": "announcement/permission-switches-apply-to-commands",
+      "pass": true
+    },
+    {
+      "name": "home/cancelled-query-does-not-send-or-write",
+      "pass": true
+    },
+    {
+      "name": "merchant/empty-response-retries-at-most-three-times",
+      "pass": true
+    },
+    {
+      "name": "merchant/failed-send-keeps-dedup-state",
+      "pass": true
+    },
+    {
+      "name": "permissions/independent-admin-switches",
+      "pass": true
+    }
+  ]
+}

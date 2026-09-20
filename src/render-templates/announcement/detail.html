@@ -1,0 +1,8 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><link rel="stylesheet" href="{{_res_path}}render-templates/announcement/style.css"></head>
+<body><main class="announcement-detail-page">
+<header><span>洛克王国 · 公告 {{id}}</span><h1>{{title}}</h1><p>{{publishedAt}}</p></header>
+{{each blocks entry}}<section>{{if entry.text}}<p class="content">{{entry.text}}</p>{{/if}}{{if entry.image}}<img src="{{entry.image}}" alt="公告图片" onerror="this.style.display='none'">{{/if}}</section>{{/each}}
+{{if !blocks.length}}<p>暂无正文</p>{{/if}}
+<footer>{{commandHint}}<br>{{copyright}}</footer>
+</main></body></html>

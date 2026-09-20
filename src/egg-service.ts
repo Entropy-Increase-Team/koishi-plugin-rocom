@@ -1,6 +1,7 @@
 import { Logger } from 'koishi'
 import fs from 'node:fs'
 import path from 'node:path'
+import { sizeVariantPayload } from './pet-size'
 
 const logger = new Logger('rocom-egg')
 
@@ -71,6 +72,7 @@ function fmtRange(lo: number | null, hi: number | null, u: string): string {
 }
 
 function num(value: any): number | null {
+  if (value === null || value === undefined || value === '') return null
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
 }
@@ -268,37 +270,66 @@ export class EggService {
       weight_min: weightMin,
       weight_max: weightMax,
       weight_label: fmtRange(weightMin, weightMax, 'kg'),
+      ...sizeVariantPayload(queryWeight, pet?.breeding?.weight_low == null ? null : pet.breeding.weight_low / 1000, pet?.breeding?.weight_high == null ? null : pet.breeding.weight_high / 1000),
       probability,
       match_count: matchCount,
       match_info_label: this.formatMatchSummary(probability, matchCount),
     }
   }
 
-  private formatSizeApiCard(item: any) {
-    // 新版 /wiki/pet-size/query 返回 items[].pet / egg_size / match 结构；旧接口是平铺字段。
+  private formatSizeApiCard(item: any, queryWeight?: number) {
+    // 兼容 /wiki/pet-size/query 的 items[].pet/egg_size/match 结构与 /egg/search 的
+    // height_range_m/cm、weight_range_kg/g、r_value/range_area 平铺结构。
     const petInfo = item?.pet && typeof item.pet === 'object' ? item.pet : {}
     const eggSize = item?.egg_size && typeof item.egg_size === 'object' ? item.egg_size : {}
     const heightRange = eggSize?.height && typeof eggSize.height === 'object' ? eggSize.height : {}
     const weightRange = eggSize?.weight && typeof eggSize.weight === 'object' ? eggSize.weight : {}
     const match = item?.match && typeof item.match === 'object' ? item.match : {}
 
-    const petId = petInfo?.pet_id || item?.petId || item?.pet_id || '-'
-    const petName = petInfo?.name || (typeof item?.pet === 'string' ? item.pet : '') || item?.name || '未知精灵'
+    const petId = petInfo?.pet_id || petInfo?.id || item?.petId || item?.pet_id || item?.id || '-'
+    const petForm = String(petInfo?.form || item?.form || '').trim()
+    let petName = petInfo?.name || (typeof item?.pet === 'string' ? item.pet : '') || item?.name || item?.pet_name || '未知精灵'
+    if (petForm && !String(petName).includes(petForm)) petName = `${petName}（${petForm}）`
+
     const typeNames = Array.isArray(petInfo?.type_names) ? petInfo.type_names.filter(Boolean) : []
     const eggGroupNames = Array.isArray(petInfo?.egg_group_names) ? petInfo.egg_group_names.filter(Boolean) : []
 
+    const [heightRangeMMin, heightRangeMMax] = this.rangePair(item?.height_range_m)
+    const [heightRangeCmMin, heightRangeCmMax] = this.rangePair(item?.height_range_cm)
+    const [weightRangeKgMin, weightRangeKgMax] = this.rangePair(item?.weight_range_kg)
+    const [weightRangeGMin, weightRangeGMax] = this.rangePair(item?.weight_range_g)
+
     const probability = num(item?.probability) ?? num(match?.percent)
     const matchCount = num(item?.matchCount)
-    const heightMin = num(heightRange?.min_m ?? item?.diameterMin)
-    const heightMax = num(heightRange?.max_m ?? item?.diameterMax)
-    const weightMin = num(weightRange?.min_kg ?? item?.weightMin)
-    const weightMax = num(weightRange?.max_kg ?? item?.weightMax)
+    const heightMin = num(heightRange?.min_m) ?? heightRangeMMin
+      ?? (heightRangeCmMin == null ? null : heightRangeCmMin / 100)
+      ?? num(item?.diameterMin)
+    const heightMax = num(heightRange?.max_m) ?? heightRangeMMax
+      ?? (heightRangeCmMax == null ? null : heightRangeCmMax / 100)
+      ?? num(item?.diameterMax)
+    const weightMin = num(weightRange?.min_kg) ?? weightRangeKgMin
+      ?? (weightRangeGMin == null ? null : weightRangeGMin / 1000)
+      ?? num(item?.weightMin)
+    const weightMax = num(weightRange?.max_kg) ?? weightRangeKgMax
+      ?? (weightRangeGMax == null ? null : weightRangeGMax / 1000)
+      ?? num(item?.weightMax)
+
+    const rValue = num(item?.r_value)
+    const rangeArea = num(item?.range_area)
+    const sizeVariant = sizeVariantPayload(queryWeight, weightMin, weightMax, fmtRange(weightMin, weightMax, 'kg'))
+    const fallbackMatchLabel = [
+      rValue != null ? `R值 ${formatNumber(rValue, 3)}` : '',
+      rangeArea != null ? `范围面积 ${formatNumber(rangeArea, 0)}` : '',
+    ].filter(Boolean).join(' / ')
+    const matchInfoLabel = String(match?.match_percent_text || '')
+      || fallbackMatchLabel
+      || this.formatMatchSummary(probability, matchCount)
 
     return {
       id: petId,
       name: petName,
-      icon: petInfo?.icon || item?.petIcon || petIconUrl(petId),
-      image: petInfo?.small_icon || item?.petImage || petImageUrl(petId),
+      icon: petInfo?.icon || item?.pet_icon_url || item?.petIcon || petIconUrl(petId),
+      image: petInfo?.small_icon || item?.pet_img_url || item?.petImage || petImageUrl(petId),
       type_label: typeNames.length ? typeNames.join(' / ') : '后端未提供',
       egg_group_ids: [],
       egg_groups_label: eggGroupNames.length ? eggGroupNames.join(' / ') : '后端未提供',
@@ -308,10 +339,17 @@ export class EggService {
       weight_min: weightMin,
       weight_max: weightMax,
       weight_label: fmtRange(weightMin, weightMax, 'kg'),
+      query_weight: queryWeight,
+      ...sizeVariant,
       probability,
       match_count: matchCount,
-      match_info_label: String(match?.match_percent_text || '') || this.formatMatchSummary(probability, matchCount),
+      match_info_label: matchInfoLabel,
     }
+  }
+
+  private rangePair(value: any): [number | null, number | null] {
+    if (Array.isArray(value) && value.length >= 2) return [num(value[0]), num(value[1])]
+    return [null, null]
   }
 
   // 新版尺寸反查按 match.layer 划分完美/范围匹配。
@@ -459,7 +497,7 @@ export class EggService {
       lines.push(`✅ 完美匹配 ${condStr} 的精灵（共 ${results.perfect.length} 只）：`)
       results.perfect.slice(0, 10).forEach((p, i) => {
         const br = p.breeding || {}
-        lines.push(`  ${i + 1}. ${petName(p)} (#${p.id}) — ${fmtRange(ht(br.height_low), ht(br.height_high), 'm')} / ${fmtRange(wt(br.weight_low), wt(br.weight_high), 'kg')} · ${formatEggGroups(this.getEggGroups(p))}`)
+        lines.push(`  ${i + 1}. ${petName(p)} (#${p.id}) — ${fmtRange(ht(br.height_low), ht(br.height_high), 'm')} / ${fmtRange(wt(br.weight_low), wt(br.weight_high), 'kg')} · ${formatEggGroups(this.getEggGroups(p))}${this.formatPetCard(p, height, weight).size_variant_label ? ' · 【' + this.formatPetCard(p, height, weight).size_variant_label + '】' : ''}`)
       })
     }
     if (results.range.length) {
@@ -467,7 +505,7 @@ export class EggService {
       lines.push(`🔍 范围匹配 ${condStr} 的精灵（共 ${results.range.length} 只，容差±15%）：`)
       results.range.slice(0, 10).forEach((p, i) => {
         const br = p.breeding || {}
-        lines.push(`  ${i + 1}. ${petName(p)} (#${p.id}) — ${fmtRange(ht(br.height_low), ht(br.height_high), 'm')} / ${fmtRange(wt(br.weight_low), wt(br.weight_high), 'kg')} · ${formatEggGroups(this.getEggGroups(p))}`)
+        lines.push(`  ${i + 1}. ${petName(p)} (#${p.id}) — ${fmtRange(ht(br.height_low), ht(br.height_high), 'm')} / ${fmtRange(wt(br.weight_low), wt(br.weight_high), 'kg')} · ${formatEggGroups(this.getEggGroups(p))}${this.formatPetCard(p, height, weight).size_variant_label ? ' · 【' + this.formatPetCard(p, height, weight).size_variant_label + '】' : ''}`)
       })
     }
     return lines.join('\n')
@@ -484,16 +522,16 @@ export class EggService {
     if (exact.length) {
       lines.push(`✅ 完美匹配 ${condStr} 的精灵（共 ${exact.length} 只）：`)
       exact.slice(0, 10).forEach((item: any, i: number) => {
-        const card = this.formatSizeApiCard(item)
-        lines.push(`  ${i + 1}. ${card.name} (#${card.id}) — ${card.height_label} / ${card.weight_label}`)
+        const card = this.formatSizeApiCard(item, weight)
+        lines.push(`  ${i + 1}. ${card.name} (#${card.id}) — ${card.height_label} / ${card.weight_label}${card.size_variant_label ? ` · 【${card.size_variant_label}】` : ''}`)
       })
     }
     if (candidates.length) {
       if (lines.length) lines.push('')
       lines.push(`🔍 范围匹配 ${condStr} 的精灵（共 ${candidates.length} 只）：`)
       candidates.slice(0, 10).forEach((item: any, i: number) => {
-        const card = this.formatSizeApiCard(item)
-        lines.push(`  ${i + 1}. ${card.name} (#${card.id}) — ${card.height_label} / ${card.weight_label}`)
+        const card = this.formatSizeApiCard(item, weight)
+        lines.push(`  ${i + 1}. ${card.name} (#${card.id}) — ${card.height_label} / ${card.weight_label}${card.size_variant_label ? ` · 【${card.size_variant_label}】` : ''}`)
       })
     }
     return lines.join('\n')
@@ -517,7 +555,7 @@ export class EggService {
       `🥚 ${data?.pet_name || '未知精灵'} (#${data?.pet_id || '-'})`,
       `属性：${data?.type_label || '未知'}`,
       `蛋组：${data?.egg_groups_label || '暂无蛋组数据'}`,
-      `可配种精灵数：${data?.total_compatible || 0}`,
+      `${data?.compatible_total_known === false ? '当前预览精灵数' : '可配种精灵数'}：${data?.total_compatible || 0}`,
     ]
     if (data?.is_undiscovered) lines.push('⚠️ 该精灵属于「未发现」蛋组，无法配种。')
     return lines.join('\n')
@@ -784,6 +822,194 @@ export class EggService {
     }
   }
 
+  // ─── 后端 Egg API 转换（上游 v3.8.0）───
+  buildCandidatesFromEggApi(keyword: string, candidates: any[]) {
+    return {
+      keyword,
+      count: candidates.length,
+      candidates: candidates.map(item => this.formatEggApiCard(item)),
+      commandHint: '请使用更精确的名称重新查询',
+      copyright: 'Koishi & WeGame 洛克王国插件',
+    }
+  }
+
+  buildSearchDataFromEggApi(pet: any, compatibleByGroup: Record<string, any> = {}) {
+    const groups = this.eggApiGroups(pet)
+    const groupIds: number[] = []
+    const groupLabels: Record<number, string> = {}
+    for (const group of groups) {
+      const id = this.eggGroupId(group)
+      if (id === null || groupIds.includes(id)) continue
+      groupIds.push(id)
+      groupLabels[id] = this.eggGroupLabel(group)
+    }
+
+    const seen = new Set<string>()
+    let totalCompatible = 0
+    const sections = groups.map((group) => {
+      const gid = this.eggGroupId(group)
+      const label = this.eggGroupLabel(group)
+      if (gid === null) return null
+      if (this.isUndiscoveredEggGroup(gid, label)) {
+        return {
+          id: gid,
+          label: label || '未发现',
+          desc: '不能和任何精灵生蛋，多用于传说中的精灵',
+          count: 0,
+          members: [],
+          has_more: false,
+          total: 0,
+        }
+      }
+
+      const groupResult = compatibleByGroup[String(gid)] ?? compatibleByGroup[gid as any] ?? {}
+      const rawMembers = Array.isArray(groupResult)
+        ? groupResult
+        : (Array.isArray(groupResult?.items) ? groupResult.items : [])
+      const members: any[] = []
+      for (const item of rawMembers) {
+        const itemId = item?.id ?? item?.pet_id
+        if (String(itemId ?? '') === String(pet?.id ?? pet?.pet_id ?? '')) continue
+        const key = String(itemId ?? item?.name ?? '')
+        if (key && !seen.has(key)) {
+          seen.add(key)
+          totalCompatible += 1
+        }
+        members.push(this.formatEggApiMember(item))
+      }
+      const total = num(groupResult?.total) ?? members.length
+      return {
+        id: gid,
+        label,
+        desc: this.eggGroupDesc(group),
+        count: total,
+        members: members.slice(0, 30),
+        has_more: total > 30 || members.length > 30,
+        total,
+      }
+    }).filter(Boolean) as any[]
+
+    const [heightMin, heightMax] = this.eggHeightRangeM(pet)
+    const [weightMin, weightMax] = this.eggWeightRangeKg(pet)
+    const petId = pet?.id ?? pet?.pet_id ?? '-'
+    return {
+      pet_name: this.eggPetDisplayName(pet),
+      pet_id: petId,
+      pet_icon: pet?.pet_icon_url || pet?.icon_url || petIconUrl(petId),
+      pet_image: pet?.pet_img_url || pet?.image_url || petImageUrl(petId),
+      type_label: this.eggApiTypeLabel(pet),
+      egg_groups_label: groupIds.map(id => groupLabels[id] || String(id)).join(' / ') || '暂无蛋组数据',
+      egg_groups: groupIds,
+      egg_group_labels: groupLabels,
+      male_rate: null,
+      female_rate: null,
+      hatch_label: '后端未提供',
+      weight_label: fmtRange(weightMin, weightMax, 'kg'),
+      height_label: fmtRange(heightMin, heightMax, 'm'),
+      total_compatible: num(compatibleByGroup.__all__?.total) ?? totalCompatible,
+      compatible_total_known: num(compatibleByGroup.__all__?.total) !== null,
+      is_undiscovered: groups.some(group => this.isUndiscoveredEggGroup(this.eggGroupId(group), this.eggGroupLabel(group))),
+      egg_group_sections: sections,
+      total_stats: '后端未提供',
+      egg_details: { has_data: false },
+      commandHint: '数据来自后端查蛋；接口不可用时自动回退 Wiki / 本地查蛋' + (num(compatibleByGroup.__all__?.total) === null ? '。总数不可用，当前数量仅为已加载预览' : ''),
+      copyright: 'Koishi & WeGame 洛克王国插件',
+    }
+  }
+
+  private formatEggApiCard(item: any) {
+    const petId = item?.id ?? item?.pet_id ?? '-'
+    const [heightMin, heightMax] = this.eggHeightRangeM(item)
+    const [weightMin, weightMax] = this.eggWeightRangeKg(item)
+    return {
+      id: petId,
+      name: this.eggPetDisplayName(item),
+      icon: item?.pet_icon_url || item?.icon_url || petIconUrl(petId),
+      image: item?.pet_img_url || item?.image_url || petImageUrl(petId),
+      type_label: this.eggApiTypeLabel(item),
+      egg_group_ids: [],
+      egg_groups_label: this.eggGroupsLabel(item),
+      height_min: heightMin,
+      height_max: heightMax,
+      height_label: fmtRange(heightMin, heightMax, 'm'),
+      weight_min: weightMin,
+      weight_max: weightMax,
+      weight_label: fmtRange(weightMin, weightMax, 'kg'),
+      probability: null,
+      match_count: null,
+      match_info_label: '后端命中',
+    }
+  }
+
+  private formatEggApiMember(item: any) {
+    return {
+      name: this.eggPetDisplayName(item),
+      id: item?.id ?? item?.pet_id ?? '-',
+      type_label: this.eggApiTypeLabel(item),
+      egg_groups_label: this.eggGroupsLabel(item),
+    }
+  }
+
+  private eggApiGroups(item: any): any[] {
+    const groups = item?.egg_groups ?? item?.egg_group ?? []
+    const list = Array.isArray(groups) ? groups : [groups]
+    return list
+      .filter(Boolean)
+      .map(group => (group && typeof group === 'object' ? group : { name: String(group), official_name: String(group) }))
+  }
+
+  private eggGroupId(group: any): number | null {
+    return num(group?.group_id ?? group?.id)
+  }
+
+  private eggGroupLabel(group: any): string {
+    return String(group?.official_name || group?.name || group?.display_name || '').trim()
+  }
+
+  private eggGroupDesc(group: any): string {
+    const label = this.eggGroupLabel(group)
+    const display = String(group?.display_name || '').trim()
+    return display && display !== label ? display : ''
+  }
+
+  private isUndiscoveredEggGroup(id: any, label: string): boolean {
+    const text = String(label || '')
+    return String(id) === '1' || text.includes('未发现') || text.includes('无法孵蛋')
+  }
+
+  private eggPetDisplayName(item: any): string {
+    const name = String(item?.name || item?.pet_name || '未知精灵').trim() || '未知精灵'
+    const form = String(item?.form || '').trim()
+    return form && !name.includes(form) ? `${name}（${form}）` : name
+  }
+
+  private eggApiTypeLabel(item: any): string {
+    const types = item?.unit_type
+    if (Array.isArray(types) && types.length) return types.filter(Boolean).join(' / ') || '未知'
+    return String(item?.type || item?.attribute_name || '未知')
+  }
+
+  private eggGroupsLabel(item: any): string {
+    const labels = this.eggApiGroups(item).map(group => this.eggGroupLabel(group)).filter(Boolean)
+    return labels.length ? labels.join(' / ') : '暂无蛋组数据'
+  }
+
+  private eggHeightRangeM(item: any): [number | null, number | null] {
+    const direct = this.rangePair(item?.height_range_m)
+    if (direct[0] != null || direct[1] != null) return direct
+    const cm = this.rangePair(item?.height_range_cm)
+    if (cm[0] != null || cm[1] != null) return [cm[0] == null ? null : cm[0] / 100, cm[1] == null ? null : cm[1] / 100]
+    return [null, null]
+  }
+
+  private eggWeightRangeKg(item: any): [number | null, number | null] {
+    const direct = this.rangePair(item?.weight_range_kg)
+    if (direct[0] != null || direct[1] != null) return direct
+    const g = this.rangePair(item?.weight_range_g)
+    if (g[0] != null || g[1] != null) return [g[0] == null ? null : g[0] / 1000, g[1] == null ? null : g[1] / 1000]
+    return [null, null]
+  }
+
   buildSizeSearchData(height?: number, weight?: number, results?: { perfect: any[]; range: any[] }, heightDisplay?: string) {
     const conditions: string[] = []
     if (height != null) conditions.push(`身高 ${heightDisplay || fmtRange(ht(height), ht(height), 'm')}`)
@@ -809,8 +1035,8 @@ export class EggService {
     if (weight != null) conditions.push(`体重 ${weight} kg`)
     const groups = this.sizeApiResultGroups(results)
     const [perfect, ranged] = this.mergeCardsByName(
-      groups.exact.map((item: any) => this.formatSizeApiCard(item)),
-      groups.candidates.map((item: any) => this.formatSizeApiCard(item)),
+      groups.exact.map((item: any) => this.formatSizeApiCard(item, weight)),
+      groups.candidates.map((item: any) => this.formatSizeApiCard(item, weight)),
     )
     const poolName = results?.query?.pool && typeof results.query.pool === 'object'
       ? results.query.pool.name

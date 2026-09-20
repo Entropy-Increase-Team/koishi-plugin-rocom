@@ -1,0 +1,38 @@
+{
+  "date": "2026-09-21",
+  "browser": "Chrome/151.0.7922.138",
+  "network": "HTTP(S) blocked",
+  "requestedRemote": 2,
+  "results": [
+    {
+      "template": "pet-ranking",
+      "pages": 2,
+      "bytes": 453983
+    },
+    {
+      "template": "share-code-team",
+      "pages": 1,
+      "bytes": 43291
+    },
+    {
+      "template": "announcement/detail",
+      "pages": 3,
+      "bytes": 1013208
+    },
+    {
+      "template": "announcement/list",
+      "pages": 1,
+      "bytes": 19405
+    },
+    {
+      "template": "player-search",
+      "pages": 1,
+      "bytes": 26689
+    },
+    {
+      "template": "searcheggs/size",
+      "pages": 1,
+      "bytes": 35413
+    }
+  ]
+}
