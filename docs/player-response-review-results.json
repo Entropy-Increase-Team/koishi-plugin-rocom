@@ -1,9 +1,9 @@
 {
   "scope": "local supplied JSON examples; mocked HTTP; no production requests or messages",
   "summary": {
-    "total": 9,
-    "passed": 7,
-    "failed": 2
+    "total": 14,
+    "passed": 14,
+    "failed": 0
   },
   "results": [
     {
@@ -28,11 +28,11 @@
     },
     {
       "name": "card/relative-marker-is-not-a-url-directory",
-      "passed": false
+      "passed": true
     },
     {
       "name": "search/relative-marker-is-not-a-url-directory",
-      "passed": false
+      "passed": true
     },
     {
       "name": "player/template-receives-new-collection-fields",
@@ -41,10 +41,30 @@
     {
       "name": "formatted-business-payload-in-completed-task",
       "passed": true
+    },
+    {
+      "name": "resource/preserves-existing-url-forms",
+      "passed": true
+    },
+    {
+      "name": "time/seconds-milliseconds-and-timezone-strings",
+      "passed": true
+    },
+    {
+      "name": "time/unknown-values-and-other-numbers",
+      "passed": true
+    },
+    {
+      "name": "sample/time-is-formatted-in-both-image-and-text",
+      "passed": true
+    },
+    {
+      "name": "legacy/rows-use-same-time-and-image-normalization",
+      "passed": true
     }
   ],
   "observations": {
-    "lastLogoutShownAsRawTimestamp": true,
+    "lastLogoutShownAsRawTimestamp": false,
     "cardHasExplicitUid": false,
     "readFields": [
       "uin",

@@ -18,7 +18,9 @@ export type IngamePlayerPayload = {
 // 相对资源地址转绝对地址（上游 v4.1.0）；非字符串/非法协议返回空串，避免渲染裂图。
 export function resourceUrl(value: unknown, apiBaseUrl: string): string {
   if (typeof value !== 'string' || !value.trim()) return ''
-  const text = value.trim()
+  // `relative/` 是后端资源标记，不属于资源路径。
+  const text = value.trim().replace(/^relative\//, '')
+  if (!text) return ''
   if (/^data:/i.test(text)) return text
   try {
     const url = new URL(text, apiBaseUrl.replace(/\/$/, '') + '/')
@@ -70,7 +72,29 @@ export function playerRows(payload: any, uid: string): PlayerRow[] {
   return [...new Map([...legacy, ...mapped].map(row => [row.field, row])).values()]
 }
 
+/** 玩家时间统一按北京时间展示，不依赖 Bot 所在服务器的时区。 */
+export function formatPlayerTime(value: unknown): string {
+  if (typeof value !== 'string' && typeof value !== 'number') return '未知'
+  const text = String(value).trim()
+  if (!text) return '未知'
+  let timestamp: number
+  if (/^[+-]?\d+(?:\.\d+)?$/.test(text)) {
+    const numeric = Number(text)
+    if (!Number.isFinite(numeric) || numeric <= 0) return '未知'
+    timestamp = numeric < 100_000_000_000 ? numeric * 1000 : numeric
+  } else {
+    // 已格式化的无时区文本视作北京时间；带 Z/偏移的 ISO 日期按原偏移解析。
+    const match = /^(\d{4})[-/](\d{2})[-/](\d{2})(?:[ T](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?))?(Z|[+-]\d{2}:?\d{2})?(?:（北京时间）)?$/i.exec(text)
+    if (!match) return '未知'
+    timestamp = Date.parse(`${match[1]}-${match[2]}-${match[3]}T${match[4] || '00:00:00'}${match[5] || '+08:00'}`)
+  }
+  const beijing = new Date(timestamp + 8 * 3600_000)
+  if (!Number.isFinite(beijing.getTime())) return '未知'
+  return `${beijing.toISOString().slice(0, 19).replace('T', ' ')}（北京时间）`
+}
+
 export function cleanPlayerFieldValue(field: string, value: unknown): string {
+  if (field === 'last_logout_time') return formatPlayerTime(value)
   const text = String(value ?? '').trim().replace(/^'+|'+$/g, '')
   if (!text || ['<0B>', '<0b>', '<0B >', '<0b >'].includes(text)) return '未设置'
   if (['is_online', 'online', 'chat_top_unlock', 'is_friend', 'is_black', 'is_black_role', 'is_chat_node_unlock'].includes(field)) {
@@ -126,6 +150,7 @@ export function parseIngamePlayerPayload(payload: IngamePlayerPayload | null | u
 export function playerField(parsed: ParsedPlayer | null, field: string, defaultValue = '未设置') {
   if (!parsed) return defaultValue
   const raw = parsed.rowMap[field]
+  if (field === 'last_logout_time') return formatPlayerTime(raw)
   if (raw == null || raw === '') return defaultValue
   const value = cleanPlayerFieldValue(field, raw)
   return value && value !== '-' && value !== '未设置' ? value : defaultValue

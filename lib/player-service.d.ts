@@ -13,6 +13,8 @@ export type IngamePlayerPayload = {
 };
 export declare function resourceUrl(value: unknown, apiBaseUrl: string): string;
 export declare function playerRows(payload: any, uid: string): PlayerRow[];
+/** 玩家时间统一按北京时间展示，不依赖 Bot 所在服务器的时区。 */
+export declare function formatPlayerTime(value: unknown): string;
 export declare function cleanPlayerFieldValue(field: string, value: unknown): string;
 export interface ParsedPlayer {
     title: string;

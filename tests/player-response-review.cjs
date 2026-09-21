@@ -97,6 +97,62 @@ function mockHttp(example) {
     const data = await new RocomClient(base, '').ingamePlayerCard(mock.ctx, uid)
     assert.deepEqual(data, cardExample.data)
   })
+  await test('resource/preserves-existing-url-forms', () => {
+    const cases = [
+      ['relative/api/v1/photo/test?size=small#card', base + '/api/v1/photo/test?size=small#card'],
+      ['/api/v1/photo/test', base + '/api/v1/photo/test'],
+      ['api/v1/photo/test', base + '/api/v1/photo/test'],
+      ['https://cdn.example.invalid/card.png', 'https://cdn.example.invalid/card.png'],
+      ['//cdn.example.invalid/card.png', 'https://cdn.example.invalid/card.png'],
+      ['data:image/png;base64,AA==', 'data:image/png;base64,AA=='],
+      ['relative/', ''], ['', ''], [null, ''], [42, ''], ['javascript:alert(1)', ''],
+    ]
+    for (const [input, expected] of cases) assert.equal(player.resourceUrl(input, base + '/'), expected)
+  })
+  await test('time/seconds-milliseconds-and-timezone-strings', () => {
+    const ms = Date.parse('2026-09-19T00:00:00Z')
+    const expected = '2026-09-19 08:00:00（北京时间）'
+    for (const input of [ms / 1000, String(ms / 1000), ms, String(ms),
+      '2026-09-19T00:00:00Z', '2026-09-19T08:00:00+08:00',
+      '2026-09-18T17:00:00-07:00', '2026-09-19 08:00:00',
+      '2026/09/19 08:00', expected]) {
+      assert.equal(player.cleanPlayerFieldValue('last_logout_time', input), expected)
+    }
+  })
+  await test('time/unknown-values-and-other-numbers', () => {
+    for (const input of [undefined, null, '', ' ', 0, '0', -1, NaN, Infinity, 'invalid', '2026-99-99', {}, false]) {
+      assert.equal(player.cleanPlayerFieldValue('last_logout_time', input), '未知')
+    }
+    const missing = player.parseIngamePlayerPayload({ player_info: { level: 0 } }, uid)
+    assert.equal(player.playerField(missing, 'last_logout_time'), '未知')
+    assert.equal(player.cleanPlayerFieldValue('level', 57), '57')
+    assert.equal(player.cleanPlayerFieldValue('collected_glass_pet_count', 0), '0')
+    assert.equal(player.cleanPlayerFieldValue('uin', '90071992547409931234'), '90071992547409931234')
+  })
+  await test('sample/time-is-formatted-in-both-image-and-text', () => {
+    const merged = player.mergePlayerPayloads(search, card)
+    const view = player.buildPlayerView(search, card, uid, base)
+    const data = query.buildPlayerSearchRenderData(merged, uid, view.cardImageUrl)
+    const expected = player.formatPlayerTime(searchExample.data.player_info.last_logout_time)
+    assert.notEqual(expected, '未知')
+    const lastLogout = data.sections.flatMap(section => section.items).find(item => item.label === '最后离线')
+    assert.equal(lastLogout.value, expected)
+    assert.ok(player.buildPlayerText(merged, uid).includes('最后离线：' + expected))
+    const html = template.render(fs.readFileSync(path.join(root, 'src/render-templates/player-search/index.html'), 'utf8'), {
+      ...data, _res_path: 'file:///review-assets/',
+    })
+    assert.ok(html.includes(expected))
+    assert.ok(!html.includes('/relative/api/'))
+  })
+  await test('legacy/rows-use-same-time-and-image-normalization', () => {
+    const payload = { rows: [
+      { field: 'last_logout_time', value: '1789776000' },
+      { field: 'card_bussiness_card_url', value: 'relative/api/v1/photo/test' },
+    ] }
+    const view = player.buildPlayerView(payload, null, uid, base)
+    assert.equal(view.cardImageUrl, base + '/api/v1/photo/test')
+    assert.equal(player.playerField(view.parsed, 'last_logout_time'), '2026-09-19 08:00:00（北京时间）')
+  })
   const p = player.parseIngamePlayerPayload(player.mergePlayerPayloads(search, card), uid)
   const data = query.buildPlayerSearchRenderData(player.mergePlayerPayloads(search, card), uid)
   const observations = {
