@@ -2,12 +2,12 @@
   "date": "2026-09-21",
   "browser": "Chrome/151.0.7922.138",
   "network": "HTTP(S) blocked",
-  "requestedRemote": 2,
+  "requestedRemote": 11,
   "results": [
     {
       "template": "pet-ranking",
       "pages": 2,
-      "bytes": 453983
+      "bytes": 454008
     },
     {
       "template": "share-code-team",
@@ -33,6 +33,21 @@
       "template": "searcheggs/size",
       "pages": 1,
       "bytes": 35413
+    },
+    {
+      "template": "home-pets",
+      "pages": 1,
+      "bytes": 105962
+    },
+    {
+      "template": "share-code-classic",
+      "pages": 1,
+      "bytes": 81894
+    },
+    {
+      "template": "pet-detail-classic",
+      "pages": 1,
+      "bytes": 79574
     }
   ]
 }

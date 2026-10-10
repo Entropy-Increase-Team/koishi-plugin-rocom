@@ -1,0 +1,415 @@
+{
+  "date": "2026-10-10",
+  "scope": "command-level review with mocked context",
+  "commands": [
+    "yxsr",
+    "今日远行商人",
+    "刷新精灵",
+    "刷新面板",
+    "取消订阅家园",
+    "取消订阅洛克公告",
+    "取消订阅远行商人",
+    "商人商品",
+    "图鉴下载",
+    "家园状态",
+    "家园精灵",
+    "家园详情",
+    "异色排行榜",
+    "异色榜",
+    "强制刷新",
+    "我的家园订阅",
+    "查看远行商人订阅",
+    "查看阵容",
+    "查看面板",
+    "查询精灵面板",
+    "洛克",
+    "洛克.QQ登录",
+    "洛克.wiki",
+    "洛克.交换大厅",
+    "洛克.公告",
+    "洛克.公告详情",
+    "洛克.切换",
+    "洛克.删除失效绑定",
+    "洛克.刷新",
+    "洛克.刷新所有凭证",
+    "洛克.刷新面板",
+    "洛克.同步配置",
+    "洛克.商人商品",
+    "洛克.商店",
+    "洛克.好友关系",
+    "洛克.家园",
+    "洛克.家园状态",
+    "洛克.家园精灵",
+    "洛克.家园详情",
+    "洛克.导入",
+    "洛克.微信登录",
+    "洛克.战绩",
+    "洛克.技能",
+    "洛克.日历",
+    "洛克.最新公告",
+    "洛克.查蛋",
+    "洛克.档案",
+    "洛克.玩家",
+    "洛克.精灵面板",
+    "洛克.绑定UID",
+    "洛克.绑定列表",
+    "洛克.背包",
+    "洛克.解绑",
+    "洛克.调试家园订阅",
+    "洛克.调试远行商人订阅",
+    "洛克.配种",
+    "洛克.阵容",
+    "洛克QQ登录",
+    "洛克qq登录",
+    "洛克wiki",
+    "洛克交换大厅",
+    "洛克公告",
+    "洛克公告详情",
+    "洛克切换",
+    "洛克删除失效绑定",
+    "洛克刷新",
+    "洛克刷新所有凭证",
+    "洛克刷新面板",
+    "洛克同步配置",
+    "洛克商人商品",
+    "洛克商店",
+    "洛克图鉴下载",
+    "洛克好友关系",
+    "洛克家园",
+    "洛克家园状态",
+    "洛克家园精灵",
+    "洛克家园详情",
+    "洛克导入",
+    "洛克异色排行榜",
+    "洛克微信登录",
+    "洛克战绩",
+    "洛克技能",
+    "洛克日历",
+    "洛克最新公告",
+    "洛克查蛋",
+    "洛克档案",
+    "洛克炫彩排行榜",
+    "洛克玩家",
+    "洛克百科",
+    "洛克精灵图鉴",
+    "洛克精灵数据",
+    "洛克精灵面板",
+    "洛克绑定UID",
+    "洛克绑定列表",
+    "洛克背包",
+    "洛克解绑",
+    "洛克调试家园订阅",
+    "洛克调试远行商人订阅",
+    "洛克配种",
+    "洛克阵容",
+    "炫彩排行榜",
+    "炫彩榜",
+    "精灵图鉴",
+    "精灵数据",
+    "精灵面板",
+    "绑定UID",
+    "订阅家园灵感",
+    "订阅家园生蛋",
+    "订阅家园菜园",
+    "订阅洛克公告",
+    "订阅远行商人",
+    "远行商人",
+    "阵容码",
+    "阵容码/查询",
+    "阵容码/解析",
+    "阵容码查询",
+    "阵容码解析",
+    "面板"
+  ],
+  "summary": {
+    "total": 71,
+    "passed": 71,
+    "failed": 0
+  },
+  "results": [
+    {
+      "name": "register/all-modules",
+      "pass": true
+    },
+    {
+      "name": "invoke/all-commands-no-args",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.档案 []",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.玩家 [\"12345678\"]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.战绩 [1]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.背包 []",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.背包 [\"异色\",1]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.阵容 []",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.交换大厅 [1]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.家园 [\"12345678\"]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.家园详情 [\"12345678\"]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.家园精灵 [\"12345678\"]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.家园状态 [\"12345678\"]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.商店 [\"3009\"]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.日历 []",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.公告 [1]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.最新公告 []",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.好友关系 [\"12345678,87654321\"]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.刷新面板 [\"12345678\"]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.精灵面板 [\"甲\",\"12345678\"]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.查蛋 [\"喵喵\"]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.查蛋 [\"0.45\",\"35.6\"]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.配种 [\"火花\",\"喵喵\"]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.wiki [\"火花\"]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.技能 [\"命中\"]",
+      "pass": true
+    },
+    {
+      "name": "case/异色排行榜 [\"50\"]",
+      "pass": true
+    },
+    {
+      "name": "case/炫彩排行榜 []",
+      "pass": true
+    },
+    {
+      "name": "case/远行商人 []",
+      "pass": true
+    },
+    {
+      "name": "case/今日远行商人 []",
+      "pass": true
+    },
+    {
+      "name": "case/商人商品 []",
+      "pass": true
+    },
+    {
+      "name": "case/查看远行商人订阅 []",
+      "pass": true
+    },
+    {
+      "name": "case/订阅远行商人 [\"1\",\"1\",\"轮次甲\"]",
+      "pass": true
+    },
+    {
+      "name": "case/订阅远行商人 [\"@全体\",\"全部\"]",
+      "pass": true
+    },
+    {
+      "name": "case/我的家园订阅 []",
+      "pass": true
+    },
+    {
+      "name": "case/订阅家园生蛋 [\"@全体\",\"12345678\"]",
+      "pass": true
+    },
+    {
+      "name": "case/订阅家园菜园 [\"12345678\"]",
+      "pass": true
+    },
+    {
+      "name": "case/订阅家园灵感 [\"12345678\"]",
+      "pass": true
+    },
+    {
+      "name": "case/家园状态 [\"12345678\"]",
+      "pass": true
+    },
+    {
+      "name": "case/阵容码/解析 [\"abcd\"]",
+      "pass": true
+    },
+    {
+      "name": "case/查看阵容 [\"59\"]",
+      "pass": true
+    },
+    {
+      "name": "case/洛克.阵容 [\"闪耀大赛\",1]",
+      "pass": true
+    },
+    {
+      "name": "private/订阅远行商人",
+      "pass": true
+    },
+    {
+      "name": "private/订阅家园生蛋",
+      "pass": true
+    },
+    {
+      "name": "private/我的家园订阅",
+      "pass": true
+    },
+    {
+      "name": "private/查看远行商人订阅",
+      "pass": true
+    },
+    {
+      "name": "permissions/non-admin-gets-hint",
+      "pass": true
+    },
+    {
+      "name": "schedulers/fire-twice-dedup",
+      "pass": true
+    },
+    {
+      "name": "lifecycle/dispose-listeners",
+      "pass": true
+    },
+    {
+      "name": "community/handlers-healthy",
+      "pass": true
+    },
+    {
+      "name": "adversarial/null-client",
+      "pass": true
+    },
+    {
+      "name": "adversarial/garbage-client",
+      "pass": true
+    },
+    {
+      "name": "schedulers/intervals-registered",
+      "pass": true
+    },
+    {
+      "name": "edge/订阅远行商人 [\"99\"]",
+      "pass": true
+    },
+    {
+      "name": "edge/订阅远行商人 [\"不存在的商品\"]",
+      "pass": true
+    },
+    {
+      "name": "edge/取消订阅远行商人 []",
+      "pass": true
+    },
+    {
+      "name": "edge/取消订阅家园 [\"生蛋\",\"12345678\"]",
+      "pass": true
+    },
+    {
+      "name": "edge/取消订阅家园 [\"全部\"]",
+      "pass": true
+    },
+    {
+      "name": "edge/洛克.商店 [\"abc\"]",
+      "pass": true
+    },
+    {
+      "name": "edge/洛克.绑定UID [\"abc\"]",
+      "pass": true
+    },
+    {
+      "name": "edge/洛克.切换 [0]",
+      "pass": true
+    },
+    {
+      "name": "edge/洛克.解绑 [99]",
+      "pass": true
+    },
+    {
+      "name": "edge/异色排行榜 [\"51\"]",
+      "pass": true
+    },
+    {
+      "name": "edge/异色排行榜 [\"0\"]",
+      "pass": true
+    },
+    {
+      "name": "edge/阵容码/解析 [\"\"]",
+      "pass": true
+    },
+    {
+      "name": "edge/阵容码/查询 [\"%%%\"]",
+      "pass": true
+    },
+    {
+      "name": "edge/洛克.查蛋 []",
+      "pass": true
+    },
+    {
+      "name": "edge/洛克.配种 [\"不存在的精灵\"]",
+      "pass": true
+    },
+    {
+      "name": "edge/洛克.好友关系 []",
+      "pass": true
+    },
+    {
+      "name": "edge/洛克.家园详情 [\"123\",\"456\"]",
+      "pass": true
+    },
+    {
+      "name": "edge/洛克.导入 [\"tgp\",\"\"]",
+      "pass": true
+    },
+    {
+      "name": "edge/查看阵容 [\"abc\"]",
+      "pass": true
+    }
+  ]
+}

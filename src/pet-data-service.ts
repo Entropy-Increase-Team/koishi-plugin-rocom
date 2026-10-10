@@ -2,6 +2,7 @@
 // 纯函数模块，便于单元测试。
 
 import { classifyWeight } from './pet-size'
+import { bloodlineElement, elementColor } from './element-colors'
 
 export interface PetDataOptionMaps {
   natures: Record<string, string>
@@ -217,7 +218,7 @@ export function petDataSkillItems(pet: any): any[] {
     })
 }
 
-function extractRawItems(payload: any): any[] {
+export function extractRawItems(payload: any): any[] {
   const rawItems: any[] = []
   if (Array.isArray(payload?.npc_pets)) {
     rawItems.push(...payload.npc_pets.filter((item: any) => item && typeof item === 'object'))
@@ -465,5 +466,123 @@ export function buildPetDataRenderData(
     emptyText: '未获取到家园精灵完整数据。请确认目标玩家在线、家园可访问，或稍后重试。',
     commandHint: '💡 洛克.家园详情 <UID> | 洛克.家园详情 <UID> <pet_gid> <npc_id>',
     copyright: 'Koishi & WeGame 洛克王国插件',
+  }
+}
+
+// ---------- 上游 WeGame rocom：家园详情 classic 模板（pet-detail-classic）视图 ----------
+
+export interface PetDetailClassicOptions {
+  optionsPayload?: any
+  skillLookup?: Record<string, any>
+  baseUrl?: string
+  loadSkillIcons?: boolean
+  // 异色/炫彩角标图路径（模板拼接 {{_res_path}}{{pet.variantIcon}}，需带 render-templates 前缀）。
+  variantIconPath?: (mutationType: number) => string
+}
+
+function classicMutationType(pet: any, raw: any): number {
+  const direct = Number(pet?.mutation_type ?? raw?.mutation_type ?? NaN)
+  if (Number.isFinite(direct) && [1, 8, 9].includes(direct)) return direct
+  const values: any[] = []
+  for (const value of [pet?.real_speciality_ids, raw?.real_speciality_ids, pet?.speciality_id, raw?.speciality_id]) {
+    if (Array.isArray(value)) values.push(...value)
+    else if (value !== undefined && value !== null && value !== '') values.push(value)
+  }
+  const ids = new Set(values.map(value => String(value).trim()))
+  if (ids.has('103') && ids.has('502')) return 9
+  if (ids.has('103')) return 1
+  if (ids.has('502')) return 8
+  return 0
+}
+
+function classicTypeNames(pet: any): string[] {
+  const fromPet = Array.isArray(pet?.unit_type) ? pet.unit_type : []
+  const fromInfo = Array.isArray(pet?.pet_types_info)
+    ? pet.pet_types_info.map((item: any) => item?.name || item?.type_name).filter(Boolean)
+    : []
+  const source: any[] = fromPet.length > 0 ? fromPet : fromInfo
+  const names = source.map((name: any) => String(name ?? '').trim()).filter(Boolean)
+  return [...new Set(names)]
+}
+
+export function buildPetDetailClassicView(res: any, uid: string, options: PetDetailClassicOptions = {}) {
+  let payload = res || {}
+  if (payload.result && typeof payload.result === 'object') payload = payload.result
+  const optionMaps = petDataOptionMaps(options.optionsPayload)
+  const pets: any[] = []
+
+  extractRawItems(payload).forEach((raw, index) => {
+    const npcPet = raw?.npc_pet && typeof raw.npc_pet === 'object' ? raw.npc_pet : {}
+    const pet = npcPet?.pet && typeof npcPet.pet === 'object' ? npcPet.pet : {}
+    const status = String(raw?.status || (Object.keys(pet).length ? 'ok' : 'unknown'))
+    const baseId: any = pet.base_conf_id || raw.pet_cfg_id || pet.catch_base_id || pet.conf_id
+    const name = pet.name || pet.pet_default_name || raw.pet_default_name || raw.name || `精灵 ${baseId || index + 1}`
+    const gender = Number(pet.gender ?? 0) || 0
+    const mutationType = classicMutationType(pet, raw)
+    const bloodName = petDataLookup(optionMaps.bloodlines, pet.blood_id ?? pet.bloodline_id, '')
+    const bloodElement = bloodlineElement(bloodName || '普通')
+    const typeNames = classicTypeNames(pet)
+    const typeTags = typeNames.map(tagName => ({ name: tagName, icon: tagName, color: elementColor(tagName) }))
+    const bloodTag = bloodName
+      ? { name: bloodName, icon: bloodElement, color: elementColor(bloodElement) }
+      : null
+    const voiceInfo = petDataVoiceInfo(pet.voice)
+    const natureText = petDataLookup(optionMaps.natures, pet.nature, '')
+
+    const skillItems = petDataSkills(pet, options.skillLookup || {}, {
+      loadSkillIcons: options.loadSkillIcons !== false,
+      baseUrl: options.baseUrl || '',
+    })
+    const classicSkill = (skill: any) => ({
+      name: skill.name,
+      iconUrl: skill.icon || '',
+      fallbackIconUrl: '',
+      placeholderIconUrl: '',
+      typeIcon: skill.element || '无',
+      typeColor: elementColor(skill.element),
+      families: skill.type || '',
+      cost: skill.cost && skill.cost !== '--' ? skill.cost : '0',
+    })
+
+    const featureRaw = pet.feature && typeof pet.feature === 'object'
+      ? pet.feature
+      : (pet.feature_info && typeof pet.feature_info === 'object' ? pet.feature_info : null)
+
+    pets.push({
+      name: String(name),
+      level: petDataDisplay(pet.level),
+      iconUrl: petDataImageUrl(baseId, 'image'),
+      fallbackIconUrl: petDataImageUrl(baseId, 'icon'),
+      fallbackIconUrl2: '',
+      genderText: gender === 1 ? '♂ 雄性' : gender === 2 ? '♀ 雌性' : '未知',
+      natureText: natureText && natureText !== '--' ? natureText : '',
+      // 标签（婉转声/粗嗓门）由 voiceLabel 单独承载，这里只放纯分贝文本避免重复。
+      voiceText: voiceInfo.value === '--' ? '' : petDataVoiceText(pet.voice),
+      voiceLabel: voiceInfo.className === 'voice-soft' ? '婉转声' : (voiceInfo.className === 'voice-rough' ? '粗嗓门' : ''),
+      variantIcon: mutationType && options.variantIconPath ? options.variantIconPath(mutationType) : '',
+      typeColor: typeTags[0]?.color || (bloodTag ? bloodTag.color : '#a687d5'),
+      bloodTag,
+      typeTags,
+      feature: featureRaw && (featureRaw.name || featureRaw.desc)
+        ? { name: String(featureRaw.name || '未知特性'), desc: String(featureRaw.desc || featureRaw.description || '') }
+        : null,
+      featureIcon: String(featureRaw?.icon || ''),
+      fallbackFeatureIcon: '',
+      attributes: petDataAttributes(pet).map(attr => ({
+        label: attr.label,
+        value: attr.value,
+        talent: attr.talent,
+        effort: attr.race,
+      })),
+      equipSkills: skillItems.filter(skill => skill.statusClass === 'equipped').map(classicSkill),
+      learnedSkills: skillItems.filter(skill => skill.statusClass !== 'equipped').map(classicSkill),
+      errorText: petDataDisplay(raw.error || raw.message || npcPet.error_message, ''),
+    })
+  })
+
+  return {
+    uid: petDataDisplay(payload.uin || uid),
+    emptyText: '未获取到家园精灵数据。请确认目标玩家在线、家园可访问，或稍后重试。',
+    pets,
   }
 }

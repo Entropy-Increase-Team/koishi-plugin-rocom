@@ -88,6 +88,10 @@ export declare class RocomClient {
     getMerchantInfo(ctx: Context, refresh?: boolean, options?: IngameTaskPollOptions & {
         auth?: IngameAuthContext;
     }): Promise<any>;
+    getLegacyMerchantInfo(ctx: Context, refresh?: boolean, options?: {
+        signal?: AbortSignal;
+        auth?: IngameAuthContext;
+    }): Promise<any>;
     queryPetSize(ctx: Context, diameter: number, weight: number, pool?: string, pageNo?: number, pageSize?: number, userIdentifier?: string): Promise<any>;
     searchEggBySize(ctx: Context, heightMeters: number, weightKg: number, pageNo?: number, pageSize?: number, userIdentifier?: string): Promise<any>;
     getPetCollectionRanking(ctx: Context, rankType: 'shining' | 'glass', limit?: number, uid?: string, options?: {
@@ -131,6 +135,12 @@ export declare class RocomClient {
         auth?: IngameAuthContext;
     }): Promise<any>;
     ingameMerchantInfo(ctx: Context, shopId?: string | number | null, options?: IngameTaskPollOptions & {
+        auth?: IngameAuthContext;
+    }): Promise<any>;
+    ingameHomeEggs(ctx: Context, uid: string, options?: IngameTaskPollOptions & {
+        auth?: IngameAuthContext;
+    }): Promise<any>;
+    ingameHomePetData(ctx: Context, uid: string, options?: IngameTaskPollOptions & {
         auth?: IngameAuthContext;
     }): Promise<any>;
     ingamePetData(ctx: Context, uid: string, extras?: {

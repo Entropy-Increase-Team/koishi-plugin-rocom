@@ -766,6 +766,15 @@ export class RocomClient {
     }
 
     if (options.signal?.aborted) return null
+    return this.getLegacyMerchantInfo(ctx, refresh, options)
+  }
+
+  // 旧版 merchant/info 直取（商品目录 / 实时接口不可用时的回退）。
+  async getLegacyMerchantInfo(
+    ctx: Context,
+    refresh = false,
+    options: { signal?: AbortSignal, auth?: IngameAuthContext } = {},
+  ) {
     const legacy = await this.get(
       ctx,
       '/api/v1/games/rocom/merchant/info',
@@ -1108,6 +1117,40 @@ export class RocomClient {
     return this.queuedQuery(ctx, '/api/v1/games/rocom/ingame/merchant/info', payload, options, {
       queuedNoTaskId: '远行商人任务已入队，但未返回 task_id',
       stillQueued: (taskId) => `远行商人任务仍在排队，请稍后重试（task_id: ${taskId}）`,
+    })
+  }
+
+  // 家园蛋状态轻量接口（上游 WeGame rocom）：只返回蛋相关数据，供蛋状态订阅轮询与即时查询。
+  async ingameHomeEggs(ctx: Context, uid: string, options: IngameTaskPollOptions & { auth?: IngameAuthContext } = {}) {
+    const sanitizedUid = this.sanitizeUid(uid)
+    if (!sanitizedUid && !options.auth?.fwToken) {
+      this.setLastError('UID 不能为空')
+      return null
+    }
+
+    const waitMs = Number(options.waitMs) || 5000
+    const payload: Record<string, any> = { wait_ms: waitMs }
+    if (sanitizedUid) payload.uid = sanitizedUid
+    return this.queuedQuery(ctx, '/api/v1/games/rocom/ingame/home/eggs', payload, options, {
+      queuedNoTaskId: '家园蛋状态任务已入队，但未返回 task_id',
+      stillQueued: (taskId) => `家园蛋状态任务仍在排队，请稍后重试（task_id: ${taskId}）`,
+    })
+  }
+
+  // 家园精灵列表（上游 WeGame rocom）：走 home/pet-data 路径，返回侧重体重和声音的精灵一览。
+  async ingameHomePetData(ctx: Context, uid: string, options: IngameTaskPollOptions & { auth?: IngameAuthContext } = {}) {
+    const sanitizedUid = this.sanitizeUid(uid)
+    if (!sanitizedUid && !options.auth?.fwToken) {
+      this.setLastError('UID 不能为空')
+      return null
+    }
+
+    const waitMs = Number(options.waitMs) || 20000
+    const payload: Record<string, any> = { wait_ms: waitMs }
+    if (sanitizedUid) payload.uid = sanitizedUid
+    return this.queuedQuery(ctx, '/api/v1/games/rocom/ingame/home/pet-data', payload, options, {
+      queuedNoTaskId: '家园精灵查询任务已入队，但未返回 task_id',
+      stillQueued: (taskId) => `家园精灵查询任务仍在排队，请稍后重试（task_id: ${taskId}）`,
     })
   }
 

@@ -5,8 +5,10 @@ import { sendImageWithFallback } from '../send-image'
 import { sendScheduledMessage } from '../subscription-send'
 import {
   buildPetDataRenderData,
+  buildPetDetailClassicView,
   petDataPetIdsFromPayload,
   petDataSkillIdsFromPayload,
+  petDataVoiceInfo,
 } from '../pet-data-service'
 import {
   buildPlayerView,
@@ -1188,13 +1190,13 @@ function buildPlayerSearchRenderData(payload: any, uid: string, cardImageUrl = '
   }
 }
 
-function buildShopRenderData(payload: any, shopId: string) {
+function buildShopRenderData(payload: any, shopId: string, options: { assetBaseUrl?: string } = {}) {
   const sections: any[] = []
   const detailItems: any[] = []
   const summaryCards: any[] = [{ label: '商店 ID', value: shopId }]
   const shop = payload?.shop || {}
   if (Array.isArray(payload?.goods)) {
-    const items = normalizeLiveMerchant(payload)
+    const items = normalizeLiveMerchant(payload, Date.now(), { assetBaseUrl: options.assetBaseUrl })
     summaryCards.push({ label: '商品数量', value: String(items.length) })
     const shopName = String(shop.name || shop.title || '').trim()
     if (shopName) summaryCards.push({ label: '商店名称', value: shopName })
@@ -1367,7 +1369,7 @@ const HOME_SUB_TEXT: Record<'garden' | 'inspiration' | 'egg', { kindText: string
   },
 }
 
-async function subscribeHome(deps: PluginDeps, session: any, uid: string, kind: 'garden' | 'inspiration' | 'egg') {
+async function subscribeHome(deps: PluginDeps, session: any, uid: string, kind: 'garden' | 'inspiration' | 'egg', mentionAll: boolean | null = null) {
   const target = sessionTarget(session)
   if (!target.userId && !canManageGroupSubscription(deps, session)) return '此指令仅限群管理员或机器人管理员使用。'
   const targetUid = await resolveHomeUid(deps, session, uid)
@@ -1387,10 +1389,290 @@ async function subscribeHome(deps: PluginDeps, session: any, uid: string, kind: 
     guild_id: session?.guildId || '',
     user_id: target.userId,
     updated_by: session?.userId || '',
+    // 上游 WeGame rocom：群订阅支持命中后 @全体；未显式指定时沿用上次设置。
+    mention_all: target.userId ? false : (mentionAll ?? existing?.mention_all ?? false),
     notify_state: existing?.notify_state || {},
     updated_at: Math.floor(Date.now() / 1000),
   })
-  return `已订阅 UID ${targetUid} ${HOME_SUB_TEXT[kind].subscribedHint}`
+  const finalMentionAll = target.userId ? false : (mentionAll ?? existing?.mention_all ?? false)
+  const mentionHint = target.userId ? '' : (finalMentionAll ? '命中后会尝试 @全体。' : '命中后不会 @全体。')
+  return [`已订阅 UID ${targetUid} ${HOME_SUB_TEXT[kind].subscribedHint}`, mentionHint].filter(Boolean).join('')
+}
+
+// 上游 WeGame rocom：订阅家园 的 @全体 写法与 UID 解析。
+const HOME_MENTION_ALL_ALIASES = new Set(['@全体', '全体', '@所有人', 'at全体', 'at所有人'])
+
+function parseHomeSubscribeArgs(args: string | undefined) {
+  const tokens = String(args || '').split(/\s+/).filter(Boolean)
+  let mentionAll: boolean | null = null
+  const uids: string[] = []
+  for (const token of tokens) {
+    if (HOME_MENTION_ALL_ALIASES.has(token.toLowerCase())) {
+      mentionAll = true
+      continue
+    }
+    uids.push(token)
+  }
+  return { mentionAll, uid: uids[0] || '' }
+}
+
+interface HomeEggPetStatus {
+  petId: string
+  name: string
+  ready: boolean
+  remaining: string
+  predictedEggTime: number
+  hasEgg: boolean
+}
+
+function pickEggStatusPayload(payload: any): any {
+  const candidates = [payload?.data, payload?.result, payload?.data?.data, payload?.result?.data, payload]
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) return candidate
+  }
+  return {}
+}
+
+function extractHomeEggPet(item: any, nowTs: number): HomeEggPetStatus | null {
+  const petInfo = item?.home_pet_info && typeof item.home_pet_info === 'object' ? item.home_pet_info : item
+  const petId = petInfo?.pet_cfg_id || petInfo?.pet_id || item?.pet_cfg_id || item?.pet_id
+  const name = String(petInfo?.name || petInfo?.pet_name || item?.name || item?.pet_name || '').trim()
+  if (!Number(petId) && !name) return null
+
+  const hasEgg = Boolean(item?.have_egg ?? petInfo?.have_egg)
+  const predictedEggTime = normalizeEpochSeconds(item?.predicted_egg_time ?? petInfo?.predicted_egg_time ?? item?.egg_ready_time)
+  const ready = hasEgg || (predictedEggTime > 0 && nowTs >= predictedEggTime)
+  const remaining = ready ? '' : (predictedEggTime > 0 ? formatEggRemaining(predictedEggTime, nowTs) : '未知')
+
+  return {
+    petId: String(petId || ''),
+    name: name || `精灵 ${petId || ''}`,
+    ready,
+    remaining,
+    predictedEggTime,
+    hasEgg,
+  }
+}
+
+/**
+ * 从 home/eggs 轻量接口响应中提取蛋状态（上游 WeGame rocom）。
+ * 接口仍在开发中，这里对多种可能的字段名做兼容。
+ */
+export function extractHomeEggStatus(payload: any): { readyCount: number, totalEggs: number, pets: HomeEggPetStatus[] } {
+  const data = pickEggStatusPayload(payload)
+  const nowTs = Math.floor(Date.now() / 1000)
+  const eggLists = [
+    data?.eggs,
+    data?.egg_list,
+    data?.egg_info,
+    data?.home_eggs,
+    data?.home_egg_list,
+    data?.home_pets,
+    data?.pet_list,
+  ].filter(Array.isArray)
+
+  const pets: HomeEggPetStatus[] = []
+  for (const list of eggLists) {
+    for (const item of list) {
+      const pet = extractHomeEggPet(item, nowTs)
+      if (pet) pets.push(pet)
+    }
+  }
+
+  const readyCount = pets.length > 0
+    ? pets.filter(pet => pet.ready).length
+    : Number(data?.ready_egg_count ?? data?.readyEggCount ?? data?.egg_ready_count ?? 0) || 0
+  const totalEggs = pets.length > 0
+    ? pets.length
+    : Number(data?.total_egg_count ?? data?.totalEggCount ?? data?.egg_count ?? 0) || 0
+
+  return { readyCount, totalEggs, pets }
+}
+
+// 与全量家园信息的蛋状态口径一致：只统计参与生蛋的精灵（有蛋或已排期）。
+function homeEggSubscriptionState(payload: any) {
+  const status = extractHomeEggStatus(payload)
+  const items = status.pets.filter(pet => pet.hasEgg || pet.predictedEggTime > 0)
+  const readyItems = items.filter(pet => pet.ready)
+  return { items, readyItems, names: readyItems.map(pet => pet.name) }
+}
+
+function buildHomeEggStatusText(uid: string, status: ReturnType<typeof extractHomeEggStatus>) {
+  const lines = [
+    `家园蛋状态 - UID ${uid}`,
+    `可收蛋精灵：${status.readyCount} 只 / 共检测 ${status.totalEggs} 只`,
+  ]
+  const tracked = status.pets.filter(pet => pet.hasEgg || pet.predictedEggTime > 0)
+  if (tracked.length > 0) {
+    lines.push('')
+    for (const pet of tracked.slice(0, 30)) {
+      lines.push(`${pet.name}  ${pet.ready ? '✅ 可收蛋' : `⏳ ${pet.remaining}`}`)
+    }
+    if (tracked.length > 30) lines.push(`…等共 ${tracked.length} 只`)
+  }
+  lines.push('')
+  lines.push(`更新时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`)
+  return lines.join('\n')
+}
+
+// 上游 WeGame rocom：家园精灵一览（home/pet-data），汇总体重、声音、变异与生蛋状态。
+function collectHomePetsViewSources(homeInfo: any, payload: any): any[] {
+  const containers = [homeInfo?.friend_cell_home_brief_info, homeCellInfo(homeInfo), homeInfo?.cell_info, homeInfo, payload?.friend_cell_home_brief_info]
+  const result: any[] = []
+  const seen = new Set<string>()
+  for (const container of containers) {
+    if (!container || typeof container !== 'object' || !Array.isArray(container.home_pets)) continue
+    for (const item of container.home_pets) {
+      const info = item?.home_pet_info && typeof item.home_pet_info === 'object' ? item.home_pet_info : item
+      const key = String(info?.pet_gid || info?.furniture_guid || `${info?.pet_cfg_id || ''}:${info?.name || ''}`)
+      if (key && seen.has(key)) continue
+      if (key) seen.add(key)
+      result.push(item)
+    }
+  }
+  return result
+}
+
+function homePetsViewPetFromNpc(raw: any): any {
+  const npcPet = raw?.npc_pet && typeof raw.npc_pet === 'object' ? raw.npc_pet : {}
+  const pet = npcPet?.pet && typeof npcPet.pet === 'object' ? npcPet.pet : (raw?.pet && typeof raw.pet === 'object' ? raw.pet : raw?.display_info)
+  const petId = raw?.pet_cfg_id || raw?.pet_id || pet?.base_conf_id || pet?.pet_id || pet?.id
+  return {
+    home_pet_info: {
+      pet_gid: raw?.pet_gid || pet?.pet_gid,
+      npc_id: raw?.npc_id || raw?.npcId,
+      pet_cfg_id: petId,
+      furniture_guid: raw?.furniture_guid,
+      name: raw?.name || pet?.name,
+      speciality_id: raw?.speciality_id || pet?.speciality_id,
+      real_speciality_ids: raw?.real_speciality_ids || pet?.real_speciality_ids || [],
+      status: raw?.status,
+    },
+    display_info: pet,
+  }
+}
+
+function isHomePetsViewGuard(homePetInfo: any, displayInfo: any, pet: any): boolean {
+  const status = String(homePetInfo?.status ?? pet?.status ?? displayInfo?.status ?? '').toLowerCase()
+  const zeroCfgWithName = String(homePetInfo?.pet_cfg_id || '0') === '0'
+    && Boolean(String(homePetInfo?.name || homePetInfo?.pet_name || '').trim())
+  return zeroCfgWithName
+    || Boolean(homePetInfo?.is_guard || homePetInfo?.guard || pet?.is_guard || pet?.guard || displayInfo?.is_guard || displayInfo?.guard)
+    || status === '2' || status === 'guard'
+}
+
+// ingame 数据体重可能以克或千克记录：大数值按克换算成千克展示。
+function homePetsWeightText(value: unknown): string {
+  const num = Number(value)
+  if (!Number.isFinite(num) || num <= 0) return '--'
+  const kg = num >= 1000 ? num / 1000 : num
+  const text = kg.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
+  return `${text}kg`
+}
+
+function buildHomePetsViewData(deps: PluginDeps, res: any, uid: string) {
+  const raw = res || {}
+  const payload = raw.result && typeof raw.result === 'object' ? raw.result : raw
+  const homeInfo = homeInfoPayload(raw)
+  const homePets = collectHomePetsViewSources(homeInfo, payload)
+  const npcPets = Array.isArray(payload.npc_pets) ? payload.npc_pets : []
+  const npcMap = new Map<string, any>()
+  for (const entry of npcPets) {
+    const npcPet = entry?.npc_pet && typeof entry.npc_pet === 'object' ? entry.npc_pet : {}
+    const pet = npcPet?.pet && typeof npcPet.pet === 'object' ? npcPet.pet : entry?.pet
+    const gid = String(entry?.pet_gid || entry?.petGid || npcPet?.pet_gid || pet?.pet_gid || '').trim()
+    if (gid) npcMap.set(gid, entry)
+  }
+  const nowTs = Math.floor(Date.now() / 1000)
+  const petSources = homePets.length > 0 ? homePets : npcPets.map(entry => homePetsViewPetFromNpc(entry))
+
+  const pets: any[] = []
+  for (const hp of petSources) {
+    const homePetInfo = hp?.home_pet_info && typeof hp.home_pet_info === 'object' ? hp.home_pet_info : hp
+    const displayInfo = hp?.display_info && typeof hp.display_info === 'object' ? hp.display_info : {}
+    const petGid = String(homePetInfo?.pet_gid || displayInfo?.pet_gid || '').trim()
+    const npcRaw = npcMap.get(petGid) || {}
+    const npcPetObj = npcRaw?.npc_pet && typeof npcRaw.npc_pet === 'object' ? npcRaw.npc_pet : {}
+    const npcFullPet = npcPetObj?.pet && typeof npcPetObj.pet === 'object' ? npcPetObj.pet
+      : (npcRaw?.pet && typeof npcRaw.pet === 'object' ? npcRaw.pet : npcRaw?.display_info)
+    const npcStatus = String(npcRaw?.status || '')
+    const hasFull = npcFullPet && typeof npcFullPet === 'object' && Object.keys(npcFullPet).length > 0 && npcStatus !== 'error'
+    const pet: any = hasFull ? npcFullPet : displayInfo
+    const petId = pet?.base_conf_id || pet?.pet_id || pet?.id || displayInfo?.base_conf_id || homePetInfo?.pet_cfg_id
+    if (isHomePetsViewGuard(homePetInfo, displayInfo, pet) || !Number(petId)) continue
+
+    const name = String(pet?.name || homePetInfo?.name || homePetInfo?.pet_name || `精灵 ${petId}`).trim()
+    const gender = Number(pet?.gender ?? displayInfo?.gender ?? 0) || 0
+    const genderText = gender === 1 ? '♂ 雄性' : gender === 2 ? '♀ 雌性' : '未知'
+    let mutationType = Number(pet?.mutation_type ?? displayInfo?.mutation_type ?? 0) || 0
+    if (!mutationType) {
+      // 与 extractHomePet 相同的变体兜底（上游 v3.4.0：real_speciality_ids 103=异色、502=炫彩）。
+      const specialityValues: any[] = []
+      for (const value of [homePetInfo.real_speciality_ids, npcRaw.real_speciality_ids, homePetInfo.speciality_id, npcRaw.speciality_id]) {
+        if (Array.isArray(value)) specialityValues.push(...value)
+        else if (value !== undefined && value !== null && value !== '') specialityValues.push(value)
+      }
+      const specialityIds = new Set(specialityValues.map(value => String(value).trim()).filter(Boolean))
+      if (specialityIds.has('103') && specialityIds.has('502')) mutationType = 9
+      else if (specialityIds.has('103')) mutationType = 1
+      else if (specialityIds.has('502')) mutationType = 8
+    }
+    const variantText = String(pet?.mutation_name || displayInfo?.mutation_name || '')
+      || (mutationType === 9 ? '异色炫彩' : mutationType === 1 ? '异色' : mutationType === 8 ? '炫彩' : '')
+
+    const hasEgg = Boolean(hp?.have_egg ?? pet?.have_egg)
+    const predictedEggTime = normalizeEpochSeconds(hp?.predicted_egg_time ?? pet?.predicted_egg_time)
+    const eggReady = hasEgg || (predictedEggTime > 0 && nowTs >= predictedEggTime)
+    const eggText = eggReady ? '可收蛋' : (predictedEggTime > 0 ? `${formatEggRemaining(predictedEggTime, nowTs)}后生蛋` : '')
+
+    pets.push({
+      id: String(petId || ''),
+      name,
+      level: pet?.level ?? displayInfo?.level ?? homePetInfo?.level ?? '--',
+      genderText,
+      weightText: homePetsWeightText(pet?.weight ?? displayInfo?.weight ?? homePetInfo?.weight ?? pet?.pet_weight),
+      voiceText: petDataVoiceInfo(pet?.voice ?? displayInfo?.voice).value,
+      variantText,
+      eggReady,
+      eggText,
+      iconUrl: homePetIcon(petId, pet?.pet_icon_url || displayInfo?.pet_icon_url || npcRaw?.icon_url || ''),
+      starIconUrl: [1, 8, 9].includes(mutationType)
+        ? deps.renderer.resourceUrl(`render-templates/home/img/rocomuid/star_${mutationType}.png`)
+        : '',
+    })
+  }
+
+  pets.sort((a, b) => (a.eggReady === b.eggReady ? 0 : (a.eggReady ? -1 : 1)))
+
+  const brief = homeBriefInfo(homeInfo)
+  const homeName = String(brief?.home_name || brief?.name || payload?.player_info?.name || '').trim() || '洛克玩家'
+
+  return {
+    title: '家园精灵',
+    homeName,
+    uid,
+    pets,
+    total: pets.length,
+    eggCount: pets.filter(pet => pet.eggReady).length,
+    emptyText: '未获取到家园精灵信息。请确认目标玩家在线、家园可访问，或稍后重试。',
+    updatedAt: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }),
+  }
+}
+
+function buildHomePetsViewText(data: ReturnType<typeof buildHomePetsViewData>) {
+  const lines = [
+    `【家园精灵】UID ${data.uid}（${data.homeName}）`,
+    `共 ${data.total} 只精灵，可收蛋 ${data.eggCount} 只`,
+  ]
+  for (const pet of (data.pets || []).slice(0, 12)) {
+    const bits = [pet.name, `Lv.${pet.level}`, pet.genderText, pet.weightText, pet.voiceText]
+    if (pet.variantText) bits.push(pet.variantText)
+    if (pet.eggText) bits.push(pet.eggText)
+    lines.push(`- ${bits.join(' ')}`)
+  }
+  if ((data.pets || []).length > 12) lines.push(`…等共 ${data.pets.length} 只`)
+  if (!data.pets?.length) lines.push(data.emptyText)
+  return lines.join('\n')
 }
 
 function homeSubscriptionState(data: any, kind: 'garden' | 'inspiration' | 'egg') {
@@ -1424,22 +1706,45 @@ function homeSubscriptionMessage(uid: string, kind: 'garden' | 'inspiration' | '
 
 async function checkHomeSubscriptions(deps: PluginDeps, signal?: AbortSignal) {
   const subs = deps.homeSubMgr.getAll()
-  const cache = new Map<string, any>()
+  const fullCache = new Map<string, any>()
+  const eggsCache = new Map<string, any>()
+  const nowSec = Math.floor(Date.now() / 1000)
   let checkedCount = 0
   let pushedCount = 0
+
+  const fetchFull = async (uid: string) => {
+    if (!fullCache.has(uid)) {
+      fullCache.set(uid, await deps.client.ingameHomeInfo(deps.ctx, uid, { timeoutMs: 30000, signal }).catch(() => null))
+    }
+    return fullCache.get(uid)
+  }
+
   for (const [key, sub] of Object.entries(subs)) {
     if (signal?.aborted) break
     if (!sub.uid || !['garden', 'inspiration', 'egg'].includes(sub.kind)) continue
     checkedCount++
-    if (!cache.has(sub.uid)) {
-      cache.set(sub.uid, await deps.client.ingameHomeInfo(deps.ctx, sub.uid, { timeoutMs: 30000, signal }))
+    const modified = () => JSON.stringify(deps.homeSubMgr.getAll()[key]) !== JSON.stringify(sub)
+
+    let state: { items: any[], readyItems: any[], names: string[] } | null = null
+    if (sub.kind === 'egg') {
+      // 上游 WeGame rocom：蛋状态订阅走轻量 home/eggs 接口，降低轮询开销。
+      if (!eggsCache.has(sub.uid)) {
+        eggsCache.set(sub.uid, await deps.client.ingameHomeEggs(deps.ctx, sub.uid, { timeoutMs: 30000, signal }).catch(() => null))
+      }
+      if (signal?.aborted) break
+      if (modified()) continue
+      const payload = eggsCache.get(sub.uid)
+      if (payload) state = homeEggSubscriptionState(payload)
     }
-    if (signal?.aborted) break
-    if (JSON.stringify(deps.homeSubMgr.getAll()[key]) !== JSON.stringify(sub)) continue
-    const res = cache.get(sub.uid)
-    if (!res) continue
-    const data = buildHomeRenderData(deps, res, sub.uid)
-    const { items, readyItems, names } = homeSubscriptionState(data, sub.kind)
+    if (!state) {
+      const res = await fetchFull(sub.uid)
+      if (signal?.aborted) break
+      if (modified()) continue
+      if (!res) continue
+      state = homeSubscriptionState(buildHomeRenderData(deps, res, sub.uid), sub.kind)
+    }
+
+    const { items, readyItems, names } = state
     const totalCount = items.length
     if (totalCount <= 0) continue
     const notifyState = { ...sub.notify_state }
@@ -1453,7 +1758,7 @@ async function checkHomeSubscriptions(deps: PluginDeps, signal?: AbortSignal) {
       if (readyItems.length < totalCount) notifyState.all = false
     }
     if (!pushLevels.length) {
-      deps.homeSubMgr.upsert(key, { ...sub, notify_state: notifyState })
+      deps.homeSubMgr.upsert(key, { ...sub, notify_state: notifyState, last_check_time: nowSec })
       continue
     }
     const owned = deps.userMgr.getUserBindings(sub.updated_by).find(binding => binding.role_id === sub.uid)
@@ -1461,13 +1766,18 @@ async function checkHomeSubscriptions(deps: PluginDeps, signal?: AbortSignal) {
     const notifyUser = owned && sub.notify_user_id === sub.updated_by ? sub.notify_user_id : ''
     const messages = pushLevels.map(level => homeSubscriptionMessage(label, sub.kind, level, totalCount, readyItems, names))
     try {
+      const body = messages.join('\n\n')
+      // 上游 WeGame rocom：群订阅 mention_all 开启时命中后 @全体。
+      const content = !sub.user_id && sub.mention_all
+        ? [h('at', { type: 'all' }), h.text('\n' + body)]
+        : (!sub.user_id && notifyUser ? [h.at(notifyUser), h.text('\n' + body)] : body)
       const sent = await sendScheduledMessage(deps.ctx, {
         platform: sub.platform,
         channelId: sub.channel_id || sub.guild_id || sub.user_id || '',
         guildId: sub.guild_id || '',
         userId: sub.user_id || '',
         selfId: sub.self_id || '',
-      }, !sub.user_id && notifyUser ? [h.at(notifyUser), h.text('\n' + messages.join('\n\n'))] : messages.join('\n\n'), signal)
+      }, content, signal)
       if (!sent || signal?.aborted || JSON.stringify(deps.homeSubMgr.getAll()[key]) !== JSON.stringify(sub)) continue
     } catch (e) {
       logger.warn(`家园订阅推送失败: ${e}`)
@@ -1475,7 +1785,7 @@ async function checkHomeSubscriptions(deps: PluginDeps, signal?: AbortSignal) {
     }
     for (const level of pushLevels) notifyState[level] = true
     pushedCount += pushLevels.length
-    deps.homeSubMgr.upsert(key, { ...sub, notify_state: notifyState, last_push_time: Math.floor(Date.now() / 1000) })
+    deps.homeSubMgr.upsert(key, { ...sub, notify_state: notifyState, last_push_time: Math.floor(Date.now() / 1000), last_check_time: nowSec })
   }
   return { subscriptions: Object.keys(subs).length, checked: checkedCount, pushed: pushedCount }
 }
@@ -1664,7 +1974,7 @@ export function register(deps: PluginDeps) {
         }))
       }
 
-      const fallback = `【${role.name}的档案】Lv.${role.level} UID:${role.id}\n评分:${ev.score || '0'} 收藏:${cl.current_collection_count || 0}/${cl.total_collection_count || 0}`
+      const fallback = `【${role.name || '洛克玩家'}的档案】Lv.${role.level || '--'} UID:${role.id || '--'}\n评分:${ev.score || '0'} 收藏:${cl.current_collection_count || 0}/${cl.total_collection_count || 0}`
       await sendImage(deps, session, 'personal-card', data, fallback)
     })
 
@@ -1707,7 +2017,7 @@ export function register(deps: PluginDeps) {
 
       const data = {
         userAvatarDisplay: role.avatar_url || '',
-        userName: role.name,
+        userName: role.name || '洛克玩家',
         userLevel: role.level || 1,
         userUid: role.id || '',
         winRate: `${bo.win_rate || 0}%`,
@@ -1717,7 +2027,7 @@ export function register(deps: PluginDeps) {
         copyright: 'Koishi & WeGame 洛克王国插件',
       }
 
-      await sendImage(deps, session, 'record', data, `【${role.name}的战绩】胜率:${bo.win_rate || 0}% 场次:${bo.total_match || 0}`)
+      await sendImage(deps, session, 'record', data, `【${role.name || '洛克玩家'}的战绩】胜率:${bo.win_rate || 0}% 场次:${bo.total_match || 0}`)
     })
 
   ctx.command('洛克').subcommand('.背包 [arg1:string] [arg2:string]', '查看精灵背包')
@@ -2026,7 +2336,9 @@ export function register(deps: PluginDeps) {
       }
 
       const lowBandwidth = Boolean(deps.config.lowBandwidthMode)
-      // Wiki 补全（技能详情/精灵体重范围）；低带宽模式跳过技能图标但仍取技能名。
+      // 上游 WeGame rocom：classic 样式走 pet-detail-classic 模板（立绘 + 属性表 + 技能栏），
+      // 不需要精灵体重范围（sizeLookup）。
+      const useClassic = deps.config.homeDetailUiStyle !== 'panel'
       const [optionsPayload, skillLookup, sizeLookup] = await Promise.all([
         deps.wikiService.getOptionsPayload().catch(() => ({})),
         (async () => {
@@ -2039,6 +2351,7 @@ export function register(deps: PluginDeps) {
           return lookup
         })(),
         (async () => {
+          if (useClassic) return {}
           const lookup: Record<string, any> = {}
           const ids = petDataPetIdsFromPayload(res)
           await Promise.all(ids.map(async (id) => {
@@ -2049,7 +2362,16 @@ export function register(deps: PluginDeps) {
         })(),
       ])
 
-      const data = buildPetDataRenderData(res, targetUid || '当前绑定', {
+      const classicData = useClassic
+        ? buildPetDetailClassicView(res, targetUid || '当前绑定', {
+            optionsPayload,
+            skillLookup,
+            baseUrl: deps.config.apiBaseUrl.replace(/\/$/, ''),
+            loadSkillIcons: !lowBandwidth,
+            variantIconPath: mutationType => `render-templates/pet-detail-classic/texture2D/star_${mutationType}.png`,
+          })
+        : null
+      const data = classicData || buildPetDataRenderData(res, targetUid || '当前绑定', {
         optionsPayload,
         skillLookup,
         sizeLookup,
@@ -2059,21 +2381,94 @@ export function register(deps: PluginDeps) {
       })
 
       const fallbackLines = [
-        `家园详情 - UID ${data.uid}（${data.onlineText}）`,
-        data.notice,
+        `家园详情 - UID ${data.uid}${data.onlineText ? `（${data.onlineText}）` : ''}`,
+        data.notice || '',
       ]
       for (const pet of (data.pets || []).slice(0, 8)) {
-        fallbackLines.push(`${pet.index}. ${pet.name} Lv.${pet.level} #${pet.baseId} ${pet.variantText} 分贝 ${pet.voiceText || '--'}`)
+        const bits = [
+          pet.index ? `${pet.index}.` : '',
+          `${pet.name} Lv.${pet.level}`,
+          pet.variantText,
+          `分贝 ${pet.voiceText || '--'}`,
+        ].filter(Boolean)
+        fallbackLines.push(bits.join(' '))
       }
       if (!data.pets?.length) fallbackLines.push(data.emptyText)
       fallbackLines.push('')
       fallbackLines.push('若服务器带宽过小导致生成超时，请在配置项打开低带宽模式。')
       fallbackLines.push('低带宽模式开启后，家园详情将不再加载技能图标。')
 
-      await sendImage(deps, session, 'pet-data', data, fallbackLines.join('\n'), {
+      await sendImage(deps, session, classicData ? 'pet-detail-classic' : 'pet-data', data, fallbackLines.join('\n'), {
         ...(lowBandwidth ? lowBandwidthRenderOptions : {}),
         timeoutMs: deps.config.renderTimeout || 30000,
       })
+    })
+
+  // 上游 WeGame rocom：家园精灵一览（home/pet-data），体重、声音、变异与生蛋状态。
+  ctx.command('洛克').subcommand('.家园精灵 [uid:string]', '查看家园精灵列表（体重、声音、生蛋状态）')
+    .alias('洛克家园精灵')
+    .alias('家园精灵')
+    .action(async ({ session }, uid = '') => {
+      let targetUid = String(uid || '').trim()
+      if (!targetUid) {
+        const binding = deps.userMgr.getPrimaryBinding(session!.userId!)
+        targetUid = String(binding?.role_id || '')
+      }
+      const fwToken = await getPrimaryToken(deps, session!.userId!)
+      if (!targetUid && !fwToken) return '请提供玩家 UID，或先完成绑定后使用 洛克.家园精灵。'
+
+      let queuedNotified = false
+      const res = await client.ingameHomePetData(ctx, targetUid, {
+        auth: { fwToken, userIdentifier: session!.userId! },
+        waitMs: deps.config.homeQueryWaitMs,
+        intervalMs: deps.config.homeQueryPollIntervalMs,
+        timeoutMs: deps.config.homeQueryTimeoutMs,
+        onQueued: async () => {
+          if (queuedNotified) return
+          queuedNotified = true
+          await session?.send?.(`UID ${targetUid} 的家园精灵查询已进入队列，正在等待游戏侧返回，请稍候…`)
+        },
+      })
+      if (!res) {
+        return [
+          `家园精灵查询失败：${client.getLastErrorBrief()}`,
+          '提示：该接口需要目标玩家在线，且目标家园可访问。',
+        ].join('\n')
+      }
+
+      const data = buildHomePetsViewData(deps, res, targetUid || '当前绑定')
+      await sendImage(deps, session, 'home-pets', data, buildHomePetsViewText(data), {
+        timeoutMs: deps.config.renderTimeout || 30000,
+      })
+    })
+
+  // 上游 WeGame rocom：立即查询指定 UID 的家园蛋状态。
+  ctx.command('洛克').subcommand('.家园状态 [uid:string]', '查询家园蛋状态（可收蛋精灵与倒计时）')
+    .alias('洛克家园状态')
+    .alias('家园状态')
+    .action(async ({ session }, uid = '') => {
+      let targetUid = String(uid || '').trim()
+      if (!targetUid) {
+        const binding = deps.userMgr.getPrimaryBinding(session!.userId!)
+        targetUid = String(binding?.role_id || '')
+      }
+      const fwToken = await getPrimaryToken(deps, session!.userId!)
+      if (!targetUid && !fwToken) return `请提供玩家 UID，或先完成绑定后使用 洛克.家园状态。`
+
+      let queuedNotified = false
+      const res = await client.ingameHomeEggs(ctx, targetUid, {
+        auth: { fwToken, userIdentifier: session!.userId! },
+        waitMs: deps.config.homeQueryWaitMs,
+        intervalMs: deps.config.homeQueryPollIntervalMs,
+        timeoutMs: deps.config.homeQueryTimeoutMs,
+        onQueued: async () => {
+          if (queuedNotified) return
+          queuedNotified = true
+          await session?.send?.(`UID ${targetUid} 的家园蛋状态查询已进入队列，正在等待游戏侧返回，请稍候…`)
+        },
+      })
+      if (!res) return `家园蛋状态查询失败：${client.getLastErrorBrief()}`
+      return buildHomeEggStatusText(targetUid, extractHomeEggStatus(res))
     })
 
   ctx.command('洛克').subcommand('.刷新面板 [uid:string]', '刷新指定 UID 的精灵面板缓存')
@@ -2166,7 +2561,7 @@ export function register(deps: PluginDeps) {
       if (!/^\d+$/.test(targetShopId)) return '商店 ID 必须是数字。用法：洛克.商店 [shop_id]，默认 3009'
       const res = await client.ingameMerchantInfo(ctx, targetShopId)
       if (!res) return `商店查询失败：${client.getLastErrorBrief()}`
-      await sendImage(deps, session, 'ingame-shop', buildShopRenderData(res, targetShopId), `【洛克商店】shop_id=${targetShopId}`)
+      await sendImage(deps, session, 'ingame-shop', buildShopRenderData(res, targetShopId, { assetBaseUrl: client.wikiAssetBaseUrl }), `【洛克商店】shop_id=${targetShopId}`)
     })
 
   ctx.command('洛克').subcommand('.好友关系 <userIds:string>', '查询好友关系')
@@ -2180,17 +2575,48 @@ export function register(deps: PluginDeps) {
       await sendImage(deps, session, 'friendship', buildFriendshipRenderData(res, userIds), `【好友关系】${userIds}`)
     })
 
-  ctx.command('订阅家园菜园 [uid:string]', '订阅指定 UID 的家园菜园成熟提醒')
+  ctx.command('订阅家园菜园 [args:text]', '订阅指定 UID 的家园菜园成熟提醒')
     .userFields(['authority'])
-    .action(async ({ session }, uid = '') => subscribeHome(deps, session, uid, 'garden'))
+    .action(async ({ session }, args = '') => {
+      const parsed = parseHomeSubscribeArgs(args)
+      return subscribeHome(deps, session, parsed.uid, 'garden', parsed.mentionAll)
+    })
 
-  ctx.command('订阅家园灵感 [uid:string]', '订阅指定 UID 的家园精灵灵感完成提醒')
+  ctx.command('订阅家园灵感 [args:text]', '订阅指定 UID 的家园精灵灵感完成提醒')
     .userFields(['authority'])
-    .action(async ({ session }, uid = '') => subscribeHome(deps, session, uid, 'inspiration'))
+    .action(async ({ session }, args = '') => {
+      const parsed = parseHomeSubscribeArgs(args)
+      return subscribeHome(deps, session, parsed.uid, 'inspiration', parsed.mentionAll)
+    })
 
-  ctx.command('订阅家园生蛋 [uid:string]', '订阅指定 UID 的家园精灵生蛋提醒')
+  ctx.command('订阅家园生蛋 [args:text]', '订阅指定 UID 的家园精灵生蛋提醒')
     .userFields(['authority'])
-    .action(async ({ session }, uid = '') => subscribeHome(deps, session, uid, 'egg'))
+    .action(async ({ session }, args = '') => {
+      const parsed = parseHomeSubscribeArgs(args)
+      return subscribeHome(deps, session, parsed.uid, 'egg', parsed.mentionAll)
+    })
+
+  // 上游 WeGame rocom：查看当前会话的家园订阅列表。
+  ctx.command('我的家园订阅', '查看当前会话的家园订阅列表')
+    .userFields(['authority'])
+    .action(async ({ session }) => {
+      const target = sessionTarget(session)
+      const kindLabel: Record<string, string> = { garden: '菜园', inspiration: '灵感', egg: '生蛋' }
+      const subs = Object.values(deps.homeSubMgr.getAll()).filter(sub =>
+        sub.platform === target.platform
+        && (sub.channel_id || '') === (target.channelId || '')
+        && (sub.user_id || '') === (target.userId || ''))
+      if (!subs.length) return isDirectSession(session) ? '你当前没有家园订阅。' : '本群当前没有家园订阅。'
+      const formatTime = (ts?: number) => (ts ? new Date(ts * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : '从未')
+      const lines = [`当前家园订阅（共 ${subs.length} 个）：`, '']
+      for (const sub of subs) {
+        const mentionText = sub.mention_all && !sub.user_id ? '，命中后 @全体' : ''
+        lines.push(`UID ${sub.uid}（${kindLabel[sub.kind] || sub.kind}${mentionText}）：上次检查 ${formatTime(sub.last_check_time)}，上次推送 ${formatTime(sub.last_push_time)}`)
+      }
+      lines.push('')
+      lines.push('发送 取消订阅家园 [菜园/灵感/生蛋] [UID] 取消订阅')
+      return lines.join('\n')
+    })
 
   ctx.command('取消订阅家园 [kind:string] [uid:string]', '取消当前会话的家园订阅')
     .userFields(['authority'])

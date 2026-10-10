@@ -18,6 +18,10 @@ export interface MerchantSubscription {
     items: string[];
     last_push_round: string | null;
     last_matched_items: string[];
+    allday_pushed?: {
+        date: string;
+        names: string[];
+    };
     updated_by: string;
 }
 export interface HomeSubscription {
@@ -32,12 +36,14 @@ export interface HomeSubscription {
     guild_id?: string;
     user_id?: string;
     updated_by: string;
+    mention_all?: boolean;
     notify_state: {
         first?: boolean;
         all?: boolean;
     };
     updated_at: number;
     last_push_time?: number;
+    last_check_time?: number;
 }
 export declare class UserManager {
     private store;

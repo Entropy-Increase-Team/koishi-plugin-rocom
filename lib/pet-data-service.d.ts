@@ -36,6 +36,7 @@ export declare function petDataAttributes(pet: any): Array<{
     percent: number;
 }>;
 export declare function petDataSkillItems(pet: any): any[];
+export declare function extractRawItems(payload: any): any[];
 export declare function petDataSkillIdsFromPayload(payload: any): string[];
 export declare function petDataPetIdsFromPayload(payload: any): string[];
 export declare function petDataSkillIconUrl(baseUrl: string, skillId: any, detail?: any): string;
@@ -60,3 +61,15 @@ export declare function buildPetDataRenderData(res: any, uid: string, options?: 
     lowBandwidthMode?: boolean;
     baseUrl?: string;
 }): any;
+export interface PetDetailClassicOptions {
+    optionsPayload?: any;
+    skillLookup?: Record<string, any>;
+    baseUrl?: string;
+    loadSkillIcons?: boolean;
+    variantIconPath?: (mutationType: number) => string;
+}
+export declare function buildPetDetailClassicView(res: any, uid: string, options?: PetDetailClassicOptions): {
+    uid: string;
+    emptyText: string;
+    pets: any[];
+};

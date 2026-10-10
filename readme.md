@@ -54,6 +54,7 @@ Koishi 版洛克王国数据查询插件。插件基于 WeGame / 后端接口提
 | `autoRefreshTime`                    | `["00:00", "12:00"]`                 | 自动刷新凭证的时间点                                    |
 | `merchantSubscriptionEnabled`        | `true`                               | 是否启用远行商人订阅检查                                |
 | `merchantSubscriptionItems`          | `["国王球", "棱镜球", "炫彩精灵蛋"]` | 默认关注的远行商人商品                                  |
+| `merchantAllDayOnceEnabled`          | `false`                              | 开启后订阅推送中全天在售商品每天只推送一次，4 小时轮次商品仍每轮推送 |
 | `merchantCheckInterval`              | `300000`                             | 远行商人订阅检查间隔，单位毫秒                          |
 | `merchantPrivateSubscriptionEnabled` | `true`                               | 是否允许私聊订阅远行商人推送                            |
 | `homeSubscriptionEnabled`            | `true`                               | 是否启用家园菜园和灵感订阅推送                          |
@@ -123,6 +124,47 @@ Koishi 版洛克王国数据查询插件。插件基于 WeGame / 后端接口提
 
 本项目使用 AGPL-3.0 License。
 
+
+## WeGame rocom 模块对齐更新
+
+对齐上游 WeGame-GameModules rocom 分支（v0.2.1）的以下能力（换蛋广场暂未移植）：
+
+> 双插件逐功能渲染对比图见 [docs/feature-comparison/](docs/feature-comparison/)（左侧 Yunzai · WeGame rocom，右侧本插件；含功能矩阵总图，可用 `node docs/feature-comparison/render.js` 与 `node docs/feature-comparison/matrix.js` 重新生成）。
+
+### Yunzai UI 移植（v1.0.22）
+
+- **阵容分享码 · 信笺风**（`share-code-classic` 模板）：立绘背景框、火漆印、属性/血脉图标与专属字体整套移植；性格加减益由 Wiki 性格摘要自动解析（兼容「+攻击 -特攻」「攻击↑ 防御↓」「加速度 减魔攻」等写法）。配置 `shareCodeUiStyle`：`classic`（默认，信笺风）/ `panel`（原面板版）。
+- **家园详情 · classic**（`pet-detail-classic` 模板）：立绘 + 六维属性表（数值/个体/成长）+ 装备/已学技能分栏 + 血脉/属性标签；classic 模式跳过不需要的体重范围 Wiki 查询，低带宽模式同样跳过技能图标。配置 `homeDetailUiStyle`：`classic`（默认）/ `panel`（原面板版）。
+
+> 全量回归说明：本次随移植新增了命令级回归测试 `npm run test:commands`（注册全部命令模块、逐条调用、接口 null/畸形数据对抗、订阅调度与去重、生命周期 dispose），并修复测试中发现的两个问题：`洛克.档案`/`洛克.战绩` 在角色名字段缺失时回退文本显示 `undefined`（现在兜底为「洛克玩家」）；`订阅远行商人` 不带参数重复订阅时回显「沿用上次配置」但实际重置为配置默认商品（现在真正沿用上次配置，含全部模式）。
+
+### 远行商人订阅体验
+
+- 新增 `商人商品` 命令：查看远行商人商品目录（`merchant/info?random_goods=all`）与订阅序号，目录内存缓存 6 小时并落盘兜底。
+- `订阅远行商人` 支持按序号订阅（`订阅远行商人 1 3 5`，解析后立刻换成商品名落盘，后端调整目录顺序不影响已有订阅）、扩展「全部」写法（全物品/所有/all/* 等），回显与 `查看远行商人订阅` 均带「序号.名称」。
+- `@全体` 写法：`订阅远行商人 @全体 1 3`；重新订阅未指定 1/0 或 @全体 时沿用上次的 @全体 设置。
+- 当天实时价格记录：实时接口只返回当前轮次价格、旧接口 `random_goods[].price` 恒为 0，现在每次查询/订阅轮询都会把实时价格按 `goods_id + 轮次` 记入 `rocom_merchant_price_log.json`（按上海自然日分桶，跨天自动清空），「今日远行商人」的历史轮次商品自动补价。
+
+### 家园订阅与查询
+
+- 家园生蛋订阅改用轻量 `ingame/home/eggs` 接口轮询（失败自动回退全量家园信息），显著降低轮询开销；菜园/灵感订阅不变。
+- 新增 `洛克.家园状态 [UID]`：立即查询指定 UID 的家园蛋状态（可收蛋精灵与生蛋倒计时，文字结果）。
+- 新增 `我的家园订阅`：查看当前群/自己的家园订阅列表，含上次检查与推送时间。
+- 三类家园订阅（`订阅家园菜园/灵感/生蛋`）支持 `@全体` 写法（如 `订阅家园生蛋 @全体 12345`），群订阅命中后尝试 @全体；未指定时沿用上次设置。
+
+### 家园精灵一览
+
+- 新增 `洛克.家园精灵 [UID]`（走 `ingame/home/pet-data` 接口）：一张图列出全家园精灵的等级、性别、体重、声音（分贝与声线标注）、变异标记（异色/炫彩/异色炫彩）和生蛋倒计时，可收蛋的精灵排在最前并带「可收蛋」角标。
+
+## RoCom 4.2 对齐更新
+
+对齐上游 astrbot 插件 v4.2.0 / v4.2.1 的远行商人改动：
+
+- 新增 `merchantAllDayOnceEnabled` 开关（默认关闭）：开启后订阅推送中全天在售商品每天只推送一次，4 小时刷新的轮次商品仍每轮推送。全天/轮次商品按接口 `next_refresh_time`、`disable_time`、`round` 等真实字段判定，不依赖商品名去重，连续轮次售卖相同商品不受影响；“订阅远行商人 全部”（每轮推送整张商人图）不受该开关影响。已推送的全天商品按订阅、按天记录在 `allday_pushed`，跨天自动失效。
+- 修复实时商人接口不返回商品图片地址时商品图 404：缺图标时按 `goods_mapping` 的 `item_id` / `item_kind` 使用 Wiki 公共物品图（`/api/v1/resources/wiki/assets/items/{kind}/{id}.png`），仍缺失时使用本地 logo 兜底；洛克商店渲染同样受益。
+- 修复商人接口连续失败时的空推送：订阅检查在接口失败时记录错误并按空结果链路等待稍后重试（最多 3 次），不再渲染空商品图片。
+
+上游 v4.3.0 的字体异步下载修复针对 AstrBot 事件循环阻塞，Koishi 侧渲染本就是异步执行，无需对齐。
 
 ## RoCom 4.1 对齐更新
 

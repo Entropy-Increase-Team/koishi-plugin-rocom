@@ -1,5 +1,6 @@
 import { isObject } from './client'
 import { resourceUrl } from './player-service'
+import { bloodlineElement, elementColor } from './element-colors'
 
 export const SHARE_CODE_MAX_LENGTH = 16 * 1024
 
@@ -108,6 +109,10 @@ function normalizeTeam(value: any, index: number, baseUrl: string) {
   return {
     slot: toInt(team.slot, index + 1),
     pet,
+    // 上游 WeGame rocom：精灵属性名列表，供信笺风模板显示属性图标。
+    typeNames: (Array.isArray((team.pet as any)?.type_names) ? (team.pet as any).type_names as string[] : [])
+      .map((item: any) => String(item ?? '').trim())
+      .filter(Boolean),
     bloodline,
     personality,
     ivs: ivs.slice(0, 3),
@@ -186,4 +191,96 @@ export function buildShareCodeText(data: any): string {
     lines.push(`解析次数：${data.parseCount}，最近记录：${data.lastSeen || '未知'}`)
   }
   return lines.join('\n')
+}
+
+// ---------- 上游 WeGame rocom：信笺风阵容分享模板（share-code-classic）视图 ----------
+
+export interface ShareCodeClassicAssets {
+  frame: string
+  logo: string
+  rocoIcon: string
+  star: string
+  wax: string
+  typeIcon: (name: string) => string
+  bloodIcon: (element: string) => string
+}
+
+export interface ClassicNatureInfo {
+  name?: string
+  up?: string
+  down?: string
+  summary?: string
+}
+
+// 性格摘要解析：兼容「+攻击 -特攻」「攻击↑ 特攻↓」「加攻击/减特攻」等写法。
+export function parseNaturePair(summary: unknown): { up: string, down: string } {
+  const text = String(summary ?? '')
+  const upMatch = text.match(/([一-龥A-Za-z]{1,4})\s*(?:↑|▲)|(?:\+|加|▲)\s*([一-龥A-Za-z]{1,4})/)
+  const downMatch = text.match(/([一-龥A-Za-z]{1,4})\s*(?:↓|▼)|(?:-|－|减|▼)\s*([一-龥A-Za-z]{1,4})/)
+  return {
+    up: (upMatch && (upMatch[1] || upMatch[2])) || '',
+    down: (downMatch && (downMatch[1] || downMatch[2])) || '',
+  }
+}
+
+export function buildShareCodeClassicView(
+  view: any,
+  assets: ShareCodeClassicAssets,
+  natureLookup: (id: string) => ClassicNatureInfo = () => ({}),
+) {
+  const teams = (view?.teams || []).map((team: any) => {
+    const element = bloodlineElement(team?.bloodline?.name || '')
+    const nature = natureLookup(String(team?.personality?.id ?? '')) || {}
+    const naturePair = { up: String(nature.up || '').trim(), down: String(nature.down || '').trim() }
+    if (!naturePair.up && !naturePair.down) {
+      const parsed = parseNaturePair(nature.summary)
+      naturePair.up = parsed.up
+      naturePair.down = parsed.down
+    }
+    const typeNames: string[] = Array.isArray(team?.typeNames) ? team.typeNames : []
+    return {
+      slotText: String(team?.slot ?? 0).padStart(2, '0'),
+      color: elementColor(element),
+      pet: {
+        name: team?.pet?.name || '未配置精灵',
+        icon: team?.pet?.icon || '',
+      },
+      typeIcons: typeNames.map((name: string) => ({ name, icon: assets.typeIcon(name) })),
+      bloodline: {
+        name: team?.bloodline?.name || `${element}系血脉`,
+        icon: team?.bloodline?.icon || assets.bloodIcon(element),
+      },
+      personality: {
+        name: team?.personality?.name || nature.name || '未知',
+        up: naturePair.up,
+        down: naturePair.down,
+      },
+      ivs_detail: (team?.ivs || [])
+        .filter((item: any) => item?.configured)
+        .map((item: any) => ({ name: item.name })),
+      skills: (team?.skills || []).map((skill: any) => ({
+        name: skill?.name || '未配置技能',
+        icon: skill?.icon || '',
+      })),
+    }
+  })
+
+  const spriteCount = view?.spriteCount || teams.length
+  return {
+    team: {
+      mode_name: view?.mode?.name || '未知编队模式',
+      share_code: view?.shareCodePreview || view?.shareCode || '',
+      sprite_count: spriteCount,
+      count_label: `/ ${spriteCount} 精灵`,
+      magic_icon: view?.magic?.icon || assets.rocoIcon,
+      teams,
+    },
+    shareAssets: {
+      frame: assets.frame,
+      logo: assets.logo,
+      rocoIcon: assets.rocoIcon,
+      star: assets.star,
+      wax: assets.wax,
+    },
+  }
 }

@@ -13,11 +13,14 @@ export interface Config {
     merchantSubscriptionEnabled: boolean;
     merchantSubscriptionItems: string[];
     merchantUiStyle: 'new' | 'old';
+    shareCodeUiStyle: 'panel' | 'classic';
+    homeDetailUiStyle: 'panel' | 'classic';
     merchantPrivateSubscriptionEnabled: boolean;
     merchantCheckMode: 'interval' | 'times';
     merchantCheckInterval: number;
     merchantCheckTimes: string[];
     merchantTimezone: string;
+    merchantAllDayOnceEnabled: boolean;
     subscriptionGroupAdminEnabled: boolean;
     subscriptionBotAdminEnabled: boolean;
     subscriptionBotAdminAuthority: number;

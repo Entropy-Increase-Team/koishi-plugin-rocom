@@ -17,6 +17,8 @@ import {
 import { register as registerAccount } from './commands/account'
 import { register as registerQuery } from './commands/query'
 import { register as registerMerchant } from './commands/merchant'
+import { MerchantCatalogService } from './merchant-catalog'
+import { MerchantPriceLog } from './merchant-price-log'
 import { register as registerWiki } from './commands/wiki'
 import { register as registerEgg } from './commands/egg'
 import { register as registerTools } from './commands/tools'
@@ -68,6 +70,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { cmd: '洛克.交换大厅', desc: '查看交换大厅' },
       { cmd: '洛克.玩家', desc: '查询 ingame 玩家资料（可选 UID）' },
       { cmd: '洛克.家园', desc: '查询家园菜园' },
+      { cmd: '洛克.家园精灵', desc: '家园精灵一览（体重/声音/生蛋）' },
       { cmd: '洛克.家园详情', desc: '家园精灵完整数据' },
       { cmd: '洛克.商店', desc: '查询 ingame 商店（默认 3009）' },
       { cmd: '洛克.日历', desc: '查看活动日历' },
@@ -80,11 +83,14 @@ const MENU_GROUPS: MenuGroup[] = [
     groupTitle: '订阅推送',
     menuItems: [
       { cmd: '远行商人', desc: '查看当前商品' },
-      { cmd: '订阅远行商人', desc: '订阅商品提醒' },
+      { cmd: '商人商品', desc: '商品目录与订阅序号' },
+      { cmd: '订阅远行商人', desc: '订阅商品提醒（序号/名称/全部）' },
       { cmd: '取消订阅远行商人', desc: '取消商人提醒' },
       { cmd: '订阅家园菜园', desc: '菜园成熟提醒' },
       { cmd: '订阅家园灵感', desc: '精灵灵感提醒' },
       { cmd: '订阅家园生蛋', desc: '精灵生蛋提醒' },
+      { cmd: '家园状态', desc: '查询家园蛋状态' },
+      { cmd: '我的家园订阅', desc: '查看家园订阅列表' },
       { cmd: '取消订阅家园', desc: '取消家园订阅' },
       { cmd: '订阅洛克公告', desc: '新公告推送提醒' },
       { cmd: '取消订阅洛克公告', desc: '取消公告订阅' },
@@ -137,11 +143,14 @@ export interface Config {
   merchantSubscriptionEnabled: boolean
   merchantSubscriptionItems: string[]
   merchantUiStyle: 'new' | 'old'
+  shareCodeUiStyle: 'panel' | 'classic'
+  homeDetailUiStyle: 'panel' | 'classic'
   merchantPrivateSubscriptionEnabled: boolean
   merchantCheckMode: 'interval' | 'times'
   merchantCheckInterval: number
   merchantCheckTimes: string[]
   merchantTimezone: string
+  merchantAllDayOnceEnabled: boolean
   subscriptionGroupAdminEnabled: boolean
   subscriptionBotAdminEnabled: boolean
   subscriptionBotAdminAuthority: number
@@ -179,10 +188,13 @@ export const Config: Schema<Config> = Schema.intersect([
     merchantSubscriptionEnabled: Schema.boolean().default(true).description('启用远行商人订阅'),
     merchantSubscriptionItems: Schema.array(String).default(['国王球', '棱镜球', '炫彩精灵蛋']).description('默认订阅商品'),
     merchantUiStyle: Schema.union(['new', 'old'] as const).default('new').description('远行商人 UI 样式：new 为新版大图卡片，old 为旧版列表卡片'),
+    shareCodeUiStyle: Schema.union(['panel', 'classic'] as const).default('classic').description('阵容分享码 UI 样式：classic 为 Yunzai 信笺风（移植版），panel 为原面板版'),
+    homeDetailUiStyle: Schema.union(['panel', 'classic'] as const).default('classic').description('家园详情 UI 样式：classic 为 Yunzai 移植版（立绘+属性表），panel 为原面板版'),
     merchantCheckMode: Schema.union(['interval', 'times'] as const).default('interval').description('商人检查模式：interval 定期轮询 / times 指定时间点'),
     merchantCheckInterval: Schema.number().default(300000).description('商人检查间隔，单位毫秒（仅 interval 模式生效）'),
     merchantCheckTimes: Schema.array(String).default([]).description('商人定时检查时间点（HH:MM 格式，如 08:00，仅 times 模式生效）'),
     merchantTimezone: Schema.string().default('Asia/Shanghai').description('远行商人时区（IANA 名称，如 Asia/Shanghai；默认 UTC+8）'),
+    merchantAllDayOnceEnabled: Schema.boolean().default(false).description('全天商品只推送一次：开启后订阅推送中全天在售商品每天只推送一次，4 小时轮次商品仍每轮推送（对应上游 merchant_all_day_once_enabled）'),
     merchantPrivateSubscriptionEnabled: Schema.boolean().default(true).description('允许个人私聊订阅远行商人推送'),
     subscriptionGroupAdminEnabled: Schema.boolean().default(true).description('允许群主/管理员管理当前群订阅（对应上游 merchant_group_admin_enabled）'),
     subscriptionBotAdminEnabled: Schema.boolean().default(true).description('允许白名单/高权限 Bot 管理员管理订阅（对应上游 merchant_bot_admin_enabled）'),
@@ -225,8 +237,13 @@ export function apply(ctx: Context, config: Config) {
   const eggService = new EggService(searcheggsDir)
   const wikiService = new WikiService(ctx, client)
   const atlasService = new AtlasService(dataDir, { zipUrls: config.atlasZipUrls, gitUrl: config.atlasGitUrl })
+  const merchantCatalog = new MerchantCatalogService(
+    path.join(dataDir, 'rocom_merchant_catalog.json'),
+    async () => client.getLegacyMerchantInfo(ctx, false),
+  )
+  const merchantPriceLog = new MerchantPriceLog(path.join(dataDir, 'rocom_merchant_price_log.json'))
 
-  const deps: PluginDeps = { ctx, config, client, userMgr, merchantSubMgr, homeSubMgr, announcementSubMgr, eggService, renderer, wikiService, atlasService }
+  const deps: PluginDeps = { ctx, config, client, userMgr, merchantSubMgr, homeSubMgr, announcementSubMgr, eggService, renderer, wikiService, atlasService, merchantCatalog, merchantPriceLog }
 
   ctx.on('ready', () => {
     migrateRoleTokensToUserId(ctx).catch((err) => {

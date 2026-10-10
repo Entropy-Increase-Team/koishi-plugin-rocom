@@ -2,8 +2,8 @@
   "date": "2026-09-21",
   "scope": "offline source tests; synthetic fixtures, no production API",
   "summary": {
-    "total": 44,
-    "passed": 44,
+    "total": 58,
+    "passed": 58,
     "failed": 0
   },
   "results": [
@@ -108,6 +108,14 @@
       "pass": true
     },
     {
+      "name": "share/classic-view-colors-and-nature",
+      "pass": true
+    },
+    {
+      "name": "petdata/classic-view-mappings",
+      "pass": true
+    },
+    {
       "name": "merchant/disposal-stops-inflight-send",
       "pass": true
     },
@@ -177,6 +185,54 @@
     },
     {
       "name": "merchant/failed-send-keeps-dedup-state",
+      "pass": true
+    },
+    {
+      "name": "merchant/allday-detection-and-icon-fallback",
+      "pass": true
+    },
+    {
+      "name": "merchant/allday-once-and-round-still-pushes",
+      "pass": true
+    },
+    {
+      "name": "merchant/interface-error-waits-and-retries",
+      "pass": true
+    },
+    {
+      "name": "merchant/catalog-build-and-selection",
+      "pass": true
+    },
+    {
+      "name": "merchant/price-log-rounds-and-rollover",
+      "pass": true
+    },
+    {
+      "name": "merchant/live-prices-recorded-per-round",
+      "pass": true
+    },
+    {
+      "name": "merchant/today-backfills-logged-prices",
+      "pass": true
+    },
+    {
+      "name": "merchant/subscribe-args-aliases-and-mention-memory",
+      "pass": true
+    },
+    {
+      "name": "home/egg-status-multi-shape-extraction",
+      "pass": true
+    },
+    {
+      "name": "home/egg-subscription-uses-light-endpoint",
+      "pass": true
+    },
+    {
+      "name": "home/egg-subscription-falls-back-to-full-info",
+      "pass": true
+    },
+    {
+      "name": "home/home-pets-view-joins-and-sorts",
       "pass": true
     },
     {

@@ -1,15 +1,16 @@
 // Offline acceptance review: node tests/alignment-review.cjs
 // Loads current TypeScript in memory; no production API, browser, or business-data writes.
 const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 const assert = require('node:assert/strict')
 const ts = require('typescript')
 const template = require('art-template')
 const root = path.resolve(__dirname, '..')
 const extraExports = {
-  'src/commands/query.ts': '\nexport const __review = { buildPlayerSearchRenderData, canManageGroupSubscription, buildShopRenderData, checkHomeSubscriptions };',
-  'src/commands/merchant.ts': '\nexport const __review = { checkMerchantSubscriptions, canManageGroupSubscription, getSubscriptionTarget, buildConfiguredMerchantRenderPayload };',
-  'src/commands/tools.ts': '\nexport const __review = { checkAnnouncementSubscriptions };',
+  'src/commands/query.ts': '\nexport const __review = { buildPlayerSearchRenderData, canManageGroupSubscription, buildShopRenderData, checkHomeSubscriptions, buildHomePetsViewData, extractHomeEggStatus }',
+  'src/commands/merchant.ts': '\nexport const __review = { checkMerchantSubscriptions, canManageGroupSubscription, getSubscriptionTarget, buildConfiguredMerchantRenderPayload, buildConfiguredTodayMerchantRenderPayload, parseMerchantSubscriptionArgs, recordLiveMerchantPrices }',
+  'src/commands/tools.ts': '\nexport const __review = { checkAnnouncementSubscriptions }',
 }
 require.extensions['.ts'] = (module, filename) => {
   const relative = path.relative(root, filename).replaceAll('\\', '/')
@@ -24,6 +25,8 @@ const player = require('../src/player-service.ts')
 const ranking = require('../src/ranking-service.ts')
 const share = require('../src/share-code-service.ts')
 const merchant = require('../src/merchant-service.ts')
+const { MerchantCatalogService, buildMerchantCatalog, resolveMerchantSelection, describeMerchantItems, isAllAlias } = require('../src/merchant-catalog.ts')
+const { MerchantPriceLog } = require('../src/merchant-price-log.ts')
 const { MerchantClock } = require('../src/merchant-clock.ts')
 const permissions = require('../src/permissions.ts')
 const { EggService } = require('../src/egg-service.ts')
@@ -192,6 +195,60 @@ const labels = { queuedNoTaskId: 'missing task id', stillQueued: () => 'timeout'
   await test('share/text-fallback-includes-talents', () => {
     const view = share.buildShareCodeView({ teams: [{ pet: { id: 1, name: '甲' }, ivs_detail: [{ id: 1, name: '测试天赋' }] }] }, 'parse')
     assert.ok(share.buildShareCodeText(view).includes('测试天赋'))
+  })
+  await test('share/classic-view-colors-and-nature', () => {
+    const view = share.buildShareCodeView({
+      share_code: 'ABCD', sprite_count: 1,
+      mode: { name: '闪耀大赛' },
+      teams: [{ slot: 1, pet: { id: 1, name: '甲', type_names: ['火'] }, bloodline: { name: '火系血脉' }, personality: { id: 5, name: '固执' },
+        ivs_detail: [{ id: 1, name: '攻击' }], skills: [{ id: 11, name: '烈焰冲锋' }] }],
+    }, 'parse', undefined, 'https://example.invalid')
+    const assets = {
+      frame: 'f', logo: 'l', rocoIcon: 'r', star: 's', wax: 'w',
+      typeIcon: name => `ti-${name}`, bloodIcon: el => `bl-${el}`,
+    }
+    const classic = share.buildShareCodeClassicView(view, assets, id => (id === '5' ? { name: '固执', summary: '+攻击 -特攻' } : {}))
+    assert.equal(classic.team.mode_name, '闪耀大赛')
+    assert.equal(classic.team.teams[0].color, '#db5525')
+    assert.equal(classic.team.teams[0].slotText, '01')
+    assert.deepEqual(classic.team.teams[0].typeIcons, [{ name: '火', icon: 'ti-火' }])
+    assert.equal(classic.team.teams[0].bloodline.icon, 'bl-火')
+    assert.equal(classic.team.teams[0].personality.up, '攻击')
+    assert.equal(classic.team.teams[0].personality.down, '特攻')
+    assert.deepEqual(classic.team.teams[0].ivs_detail, [{ name: '攻击' }])
+    assert.equal(classic.shareAssets.frame, 'f')
+    // 性格摘要解析器兼容多写法
+    assert.deepEqual(share.parseNaturePair('攻击↑ 防御↓'), { up: '攻击', down: '防御' })
+    assert.deepEqual(share.parseNaturePair('加速度 减魔攻'), { up: '速度', down: '魔攻' })
+  })
+  await test('petdata/classic-view-mappings', () => {
+    const view = require('../src/pet-data-service.ts').buildPetDetailClassicView({
+      npc_pets: [{ pet_gid: 'g1', status: 'ok', npc_pet: { ret_code: 0, pet: {
+        base_conf_id: 101, name: '甲', level: 88, gender: 2, nature: 3, blood_id: 2,
+        voice: 98, mutation_type: 1, unit_type: ['火'],
+        attribute_info: { hp: { base_value: 300, total_race: 320, talent: 28 } },
+        skill: { skill_data: [{ id: 11, is_equipped: true, pos: 1 }, { id: 12, is_learned: true, pos: 2 }] },
+      } } }],
+    }, '12345678', {
+      optionsPayload: { pet: { natures: [{ id: 3, name: '固执', summary: '+攻击 -特攻' }], bloodlines: [{ id: 2, name: '火系血脉' }] } },
+      skillLookup: { 11: { name: '烈焰冲锋', element_type: '火', cost: 2 }, 12: { name: '蓄力', element_type: '普通', cost: 1 } },
+      baseUrl: 'https://example.invalid',
+      variantIconPath: m => `render-templates/pet-detail-classic/texture2D/star_${m}.png`,
+    })
+    assert.equal(view.uid, '12345678')
+    const pet = view.pets[0]
+    assert.equal(pet.genderText, '♀ 雌性')
+    assert.equal(pet.natureText, '固执（+攻击 -特攻）')
+    assert.equal(pet.voiceLabel, '婉转声')
+    assert.equal(pet.variantIcon, 'render-templates/pet-detail-classic/texture2D/star_1.png')
+    assert.equal(pet.bloodTag.name, '火系血脉')
+    assert.equal(pet.bloodTag.icon, '火')
+    assert.deepEqual(pet.typeTags, [{ name: '火', icon: '火', color: '#db5525' }])
+    assert.equal(pet.attributes[0].effort, '320')
+    assert.equal(pet.equipSkills.length, 1)
+    assert.equal(pet.equipSkills[0].name, '烈焰冲锋')
+    assert.equal(pet.learnedSkills.length, 1)
+    assert.equal(pet.learnedSkills[0].name, '蓄力')
   })
   await test('merchant/disposal-stops-inflight-send', async () => {
     let disposed, interval, completeRequest, sends = 0
@@ -380,6 +437,306 @@ const labels = { queuedNoTaskId: 'missing task id', stillQueued: () => 'timeout'
       assert.equal(result.pushed, 0)
       assert.equal(updates, 0)
     } finally { Date.now = nativeNow }
+  })
+  await test('merchant/allday-detection-and-icon-fallback', () => {
+    const sec = iso => Date.parse(iso) / 1000
+    const clock = new MerchantClock('Asia/Shanghai')
+    const secondsOfDay = ms => { const p = clock.parts(ms); return p.hour * 3600 + p.minute * 60 + p.second }
+    // 带 next_refresh_time 的商品随轮次刷新，是 4 小时商品
+    assert.equal(merchant.isAllDayMerchantProduct(sec('2026-09-21T15:00:00+08:00') * 1000, null, null, undefined, secondsOfDay), false)
+    // 旧接口 round：0 全天，1-4 对应轮次
+    assert.equal(merchant.isAllDayMerchantProduct(null, null, null, 0, secondsOfDay), true)
+    assert.equal(merchant.isAllDayMerchantProduct(null, null, null, '2', secondsOfDay), false)
+    // 起止跨度超过单轮 4 小时视为全天
+    assert.equal(merchant.isAllDayMerchantProduct(null, sec('2026-09-21T08:00:00+08:00') * 1000, sec('2026-09-21T23:59:59+08:00') * 1000, undefined, secondsOfDay), true)
+    // 仅知结束时间：结束时刻落在当日 24:00 边界视为全天
+    assert.equal(merchant.isAllDayMerchantProduct(null, null, Date.parse('2026-09-21T16:00:00+08:00'), undefined, secondsOfDay), false)
+    assert.equal(merchant.isAllDayMerchantProduct(null, null, Date.parse('2026-09-22T00:00:00+08:00'), undefined, secondsOfDay), true)
+    // 同一商品出现多次，只有全部为全天才按全天去重
+    assert.deepEqual([...merchant.collectAllDayProductNames([
+      { name: '甲', allDay: true }, { name: '甲', allDay: true }, { name: '乙', allDay: false },
+    ])], ['甲'])
+    // 缺图标时按 goods_mapping 的 item_id/item_kind 拼 Wiki 物品图；非数字 ID 不生成
+    assert.equal(merchant.wikiItemAssetUrl('https://example.invalid/', '12', ''), 'https://example.invalid/api/v1/resources/wiki/assets/items/bag/12.png')
+    assert.equal(merchant.wikiItemAssetUrl('https://example.invalid', 'abc', 'pet'), '')
+    const items = merchant.normalizeLiveMerchant({
+      goods: [{ goods_id: 7, disable_time: sec('2026-09-21T23:59:59+08:00') }],
+      _goods_mapping: [{ goods_id: 7, goods_name: '测试商品', item_id: 123, item_kind: 'pet' }],
+    }, Date.parse('2026-09-21T12:00:00+08:00'), { assetBaseUrl: 'https://example.invalid', secondsOfDay })
+    assert.equal(items[0].icon, 'https://example.invalid/api/v1/resources/wiki/assets/items/pet/123.png')
+    assert.equal(items[0].allDay, true)
+  })
+  await test('merchant/allday-once-and-round-still-pushes', async () => {
+    const NativeDate = Date
+    const sec = iso => NativeDate.parse(iso) / 1000
+    const round3Start = NativeDate.parse('2026-09-21T16:00:00+08:00')
+    let nowMs = NativeDate.parse('2026-09-21T12:00:00+08:00')
+    global.Date = class extends NativeDate {
+      constructor(...args) { super(...(args.length ? args : [nowMs])) }
+      static now() { return nowMs }
+    }
+    const sends = []
+    const store = {
+      G1: { platform: 'qq', self_id: 'B', group_id: 'G1', channel_id: 'G1', items: ['全天甲', '轮次'], last_push_round: null, last_matched_items: [] },
+      G2: { platform: 'qq', self_id: 'B', group_id: 'G2', channel_id: 'G2', items: ['全天甲'], last_push_round: null, last_matched_items: [] },
+    }
+    const payload = () => ({ goods: [
+      { goods_id: 1, name: '全天甲', start_time: sec('2026-09-21T08:00:00+08:00'), disable_time: sec('2026-09-21T23:59:59+08:00') },
+      nowMs < round3Start
+        ? { goods_id: 2, name: '轮次乙', start_time: sec('2026-09-21T12:00:00+08:00'), disable_time: sec('2026-09-21T16:00:00+08:00') }
+        : { goods_id: 3, name: '轮次丙', start_time: sec('2026-09-21T16:00:00+08:00'), disable_time: sec('2026-09-21T20:00:00+08:00') },
+    ] })
+    try {
+      const deps = { config: { ...config, merchantAllDayOnceEnabled: true },
+        ctx: { bots: [{ platform: 'qq', selfId: 'B', sendMessage: async (channelId) => { sends.push(channelId); return ['m'] } }] },
+        client: { getMerchantInfo: async () => payload() },
+        renderer: { renderHtml: async () => Buffer.from('img') },
+        merchantSubMgr: { getAll: () => JSON.parse(JSON.stringify(store)), upsert: (k, s) => { store[k] = s } } }
+      const first = await merchantCommands.__review.checkMerchantSubscriptions(deps)
+      assert.equal(first.pushed, 2)
+      assert.deepEqual(store.G1.allday_pushed, { date: '2026-09-21', names: ['全天甲'] })
+      assert.deepEqual(store.G2.allday_pushed, { date: '2026-09-21', names: ['全天甲'] })
+      // 同一轮再次检查：去重状态生效，不重复推送
+      assert.equal((await merchantCommands.__review.checkMerchantSubscriptions(deps)).pushed, 0)
+      // 下一轮：只订阅全天商品的会话当天不再推送，同时订阅轮次商品的会话仍每轮推送
+      nowMs = round3Start
+      const third = await merchantCommands.__review.checkMerchantSubscriptions(deps)
+      assert.equal(third.pushed, 1)
+      assert.deepEqual(sends, ['G1', 'G2', 'G1'])
+      assert.deepEqual(store.G2.allday_pushed, { date: '2026-09-21', names: ['全天甲'] })
+    } finally { global.Date = NativeDate }
+  })
+  await test('merchant/interface-error-waits-and-retries', async () => {
+    const nativeTimeout = global.setTimeout, nativeNow = Date.now
+    let interval, calls = 0, done
+    const delays = []
+    const finished = new Promise(resolve => { done = resolve })
+    Date.now = () => Date.parse('2026-09-21T04:00:00Z')
+    global.setTimeout = (fn, ms, ...args) => {
+      if (ms >= 210000 && ms <= 270000) { delays.push(ms); return nativeTimeout(fn, 0, ...args) }
+      return nativeTimeout(fn, ms, ...args)
+    }
+    try {
+      const ctx = { command: () => { const c = {}; for (const k of ['alias', 'action', 'subcommand', 'userFields']) c[k] = () => c; return c },
+        on: () => {}, setInterval: fn => { interval = fn }, setTimeout: fn => fn() }
+      const deps = { ctx, config, merchantSubMgr: { getAll: () => ({ G: { items: ['甲'] } }) },
+        client: { getMerchantInfo: async () => { calls++; if (calls === 4) done(); return null } }, renderer: {} }
+      merchantCommands.register(deps)
+      interval()
+      await Promise.race([finished, new Promise((_, reject) => nativeTimeout(() => reject(Error('retry did not finish')), 300))])
+      await new Promise(resolve => nativeTimeout(resolve, 10))
+      assert.equal(calls, 4)
+      assert.equal(delays.length, 3)
+    } finally { global.setTimeout = nativeTimeout; Date.now = nativeNow }
+  })
+  await test('merchant/catalog-build-and-selection', () => {
+    const catalog = buildMerchantCatalog([
+      { goods_name: '国王球', id: 1, item_id: 11 },
+      { goods_name: '国王球', id: 2 },
+      { goods_name: '棱镜球', id: 3 },
+    ])
+    assert.deepEqual(catalog.map(item => item.name), ['国王球', '棱镜球'])
+    assert.equal(catalog[0].index, 1)
+    assert.equal(catalog[1].index, 2)
+    const resolved = resolveMerchantSelection(['1', '棱镜球', '9', '新商品'], catalog)
+    assert.deepEqual(resolved.names, ['国王球', '棱镜球', '新商品'])
+    assert.deepEqual(resolved.unknownIndexes, ['9'])
+    assert.deepEqual(resolved.unrecognizedNames, ['新商品'])
+    assert.equal(isAllAlias('所有物品'), true)
+    assert.equal(isAllAlias('all'), true)
+    assert.equal(isAllAlias('国王球'), false)
+    assert.equal(resolveMerchantSelection(['*'], catalog).all, true)
+    assert.equal(describeMerchantItems(['国王球', '新商品'], catalog), '1.国王球、新商品')
+    // 目录为空（离线）时文字词条不报未识别；纯数字序号仍按未命中序号处理
+    const offline = resolveMerchantSelection(['1', '国王球'], [])
+    assert.deepEqual(offline.names, ['国王球'])
+    assert.deepEqual(offline.unrecognizedNames, [])
+    assert.deepEqual(offline.unknownIndexes, ['1'])
+  })
+  await test('merchant/price-log-rounds-and-rollover', () => {
+    const log = new MerchantPriceLog(path.join(os.tmpdir(), `rocom-price-log-${Date.now()}-${Math.random().toString(36).slice(2)}.json`))
+    const day1 = new Date('2026-10-10T04:00:00Z')
+    const day2 = new Date('2026-10-11T04:00:00Z')
+    log.record([{ goods_id: 7, goods_name: '甲', price: 120, origin_price: 150, buy_limit_num: 5 }], { now: day1, round: 2 })
+    log.record([{ goods_id: 7, goods_name: '甲', price: 99 }], { now: day1, round: 3 })
+    // 同轮优先，其余轮次退回最近一次观察值
+    assert.equal(log.lookup(7, '', 2, day1).price, 120)
+    assert.equal(log.lookup(7, '', 3, day1).price, 99)
+    assert.equal(log.lookup(7, '', 1, day1).price, 99)
+    // 按 goods_id 查不到时按名称兜底
+    assert.equal(log.lookup(0, '甲', 0, day1).price, 99)
+    // 无效价格不写入
+    log.record([{ goods_id: 8, goods_name: '乙', price: 0 }], { now: day1, round: 2 })
+    assert.equal(log.lookup(8, '乙', 2, day1), null)
+    // 跨天自动清空
+    assert.equal(log.lookup(7, '甲', 2, day2), null)
+    assert.deepEqual(Object.keys(log.snapshot().items), [])
+  })
+  await test('merchant/live-prices-recorded-per-round', () => {
+    const NativeDate = Date
+    const nowMs = NativeDate.parse('2026-10-10T12:00:00+08:00')
+    global.Date = class extends NativeDate {
+      constructor(...args) { super(...(args.length ? args : [nowMs])) }
+      static now() { return nowMs }
+    }
+    try {
+      const log = new MerchantPriceLog(path.join(os.tmpdir(), `rocom-price-live-${Date.now()}-${Math.random().toString(36).slice(2)}.json`))
+      const res = {
+        _source: 'live',
+        goods: [
+          { goods_id: 5, price: 66, limit_buy_num: 3, next_refresh_time: NativeDate.parse('2026-10-10T16:00:00+08:00') / 1000 },
+          { goods_id: 6, price: { real: { amount: 88 }, origin: { amount: 120 } } },
+        ],
+        goods_mapping: [{ goods_id: 5, goods_name: '当前球', item_id: 51 }, { goods_id: 6, goods_name: '全天球', item_id: 61 }],
+      }
+      merchantCommands.__review.recordLiveMerchantPrices({ merchantPriceLog: log }, res)
+      const items = log.snapshot().items
+      assert.equal(items['5'].name, '当前球')
+      assert.equal(items['5'].price, 66)
+      // 12:00 属于第 2 轮，带刷新时间的商品记入轮次 2
+      assert.ok(items['5'].by_round['2'])
+      assert.equal(items['6'].price, 88)
+      assert.equal(items['6'].origin_price, 120)
+      // 缺 next_refresh_time 的视为全天（round 0）
+      assert.ok(items['6'].by_round['0'])
+    } finally { global.Date = NativeDate }
+  })
+  await test('merchant/today-backfills-logged-prices', () => {
+    const NativeDate = Date
+    const nowMs = NativeDate.parse('2026-10-10T12:00:00+08:00')
+    global.Date = class extends NativeDate {
+      constructor(...args) { super(...(args.length ? args : [nowMs])) }
+      static now() { return nowMs }
+    }
+    try {
+      const log = new MerchantPriceLog(path.join(os.tmpdir(), `rocom-price-today-${Date.now()}-${Math.random().toString(36).slice(2)}.json`))
+      // 第 1 轮（08:00-12:00）观察到的实时价格
+      log.record([{ goods_id: 5, goods_name: '历史球', price: 88, buy_limit_num: 2 }], { now: new Date(NativeDate.parse('2026-10-10T09:00:00+08:00')), round: 1 })
+      const sec = iso => NativeDate.parse(iso) / 1000
+      const res = {
+        _source: 'live',
+        goods: [
+          { goods_id: 6, start_time: sec('2026-10-10T12:00:00+08:00'), disable_time: sec('2026-10-10T16:00:00+08:00'), next_refresh_time: sec('2026-10-10T16:00:00+08:00'), price: 66 },
+          { goods_id: 5, start_time: sec('2026-10-10T08:00:00+08:00'), disable_time: sec('2026-10-10T12:00:00+08:00') },
+        ],
+        goods_mapping: [{ goods_id: 6, goods_name: '当前球' }, { goods_id: 5, goods_name: '历史球' }],
+      }
+      const deps = { config, client: {}, renderer: {}, merchantPriceLog: log }
+      const view = merchantCommands.__review.buildConfiguredTodayMerchantRenderPayload(deps, res)
+      const history = view.products.find(product => product.name === '历史球')
+      const current = view.products.find(product => product.name === '当前球')
+      // 已结束轮次的商品用当天记录补价，当前轮次保持实时价格
+      assert.equal(history.price, 88)
+      assert.equal(current.price, 66)
+    } finally { global.Date = NativeDate }
+  })
+  await test('merchant/subscribe-args-aliases-and-mention-memory', () => {
+    const parse = merchantCommands.__review.parseMerchantSubscriptionArgs
+    const withPrefix = parse('1 国王球', ['默认'])
+    assert.equal(withPrefix.mentionAll, true)
+    assert.deepEqual(withPrefix.tokens, ['国王球'])
+    const atAll = parse('@全体 1 3', ['默认'])
+    assert.equal(atAll.mentionAll, true)
+    assert.deepEqual(atAll.tokens, ['1', '3'])
+    const off = parse('0 国王球', ['默认'])
+    assert.equal(off.mentionAll, false)
+    // 未指定时为 null，由调用方沿用上次设置
+    const plain = parse('', ['默认'])
+    assert.equal(plain.mentionAll, null)
+    assert.deepEqual(plain.items, ['默认'])
+    assert.equal(plain.source, '默认')
+    // 全部写法扩展
+    for (const token of ['全部', '所有物品', 'all', '*']) {
+      assert.equal(parse(token, ['默认']).match_all, true, token)
+    }
+  })
+  await test('home/egg-status-multi-shape-extraction', () => {
+    const now = Math.floor(Date.now() / 1000)
+    const readyTime = now - 60
+    const pendingTime = now + 3600
+    const status = query.extractHomeEggStatus({ data: { home_pets: [
+      { home_pet_info: { pet_cfg_id: 1, name: '甲' }, have_egg: true },
+      { home_pet_info: { pet_cfg_id: 2, name: '乙' }, predicted_egg_time: pendingTime },
+    ] } })
+    assert.equal(status.readyCount, 1)
+    assert.equal(status.totalEggs, 2)
+    assert.equal(status.pets[0].ready, true)
+    assert.ok(status.pets[1].remaining.includes('小时'))
+    const nested = query.extractHomeEggStatus({ result: { eggs: [{ pet_id: 9, name: '丙', egg_ready_time: readyTime }] } })
+    assert.equal(nested.readyCount, 1)
+    // 顶层计数字段兜底
+    const counts = query.extractHomeEggStatus({ ready_egg_count: 2, total_egg_count: 5 })
+    assert.equal(counts.readyCount, 2)
+    assert.equal(counts.totalEggs, 5)
+  })
+  await test('home/egg-subscription-uses-light-endpoint', async () => {
+    let eggsCalls = 0, fullCalls = 0, sends = 0
+    const sub = { uid: '123', kind: 'egg', platform: 'qq', channel_id: 'G', guild_id: 'G', updated_by: 'U', notify_state: {} }
+    const deps = { config,
+      ctx: { bots: [{ platform: 'qq', selfId: 'B', sendMessage: async () => { sends++; return ['m'] } }] },
+      homeSubMgr: { getAll: () => ({ G: sub }), upsert: () => {} },
+      userMgr: { getUserBindings: () => [] },
+      client: {
+        ingameHomeEggs: async () => { eggsCalls++; return { home_pets: [
+          { home_pet_info: { pet_cfg_id: 1, name: '甲' }, have_egg: true },
+          { home_pet_info: { pet_cfg_id: 2, name: '乙' }, predicted_egg_time: Math.floor(Date.now() / 1000) + 3600 },
+        ] } },
+        ingameHomeInfo: async () => { fullCalls++; return { home_info: {} } },
+      } }
+    const result = await query.checkHomeSubscriptions(deps)
+    assert.equal(eggsCalls, 1)
+    assert.equal(fullCalls, 0)
+    assert.equal(result.pushed, 1)
+    assert.equal(sends, 1)
+  })
+  await test('home/egg-subscription-falls-back-to-full-info', async () => {
+    let eggsCalls = 0, fullCalls = 0, sends = 0
+    const sub = { uid: '123', kind: 'egg', platform: 'qq', channel_id: 'G', guild_id: 'G', updated_by: 'U', notify_state: {} }
+    const deps = { config,
+      ctx: { bots: [{ platform: 'qq', selfId: 'B', sendMessage: async () => { sends++; return ['m'] } }] },
+      homeSubMgr: { getAll: () => ({ G: sub }), upsert: () => {} },
+      userMgr: { getUserBindings: () => [] },
+      renderer: { resourceUrl: () => 'file:///star.png' },
+      client: {
+        ingameHomeEggs: async () => { eggsCalls++; return null },
+        ingameHomeInfo: async () => { fullCalls++; return { home_info: { home_pets: [
+          { home_pet_info: { pet_cfg_id: 3, name: '丙' }, have_egg: true },
+        ] } } },
+      } }
+    const result = await query.checkHomeSubscriptions(deps)
+    assert.equal(eggsCalls, 1)
+    assert.equal(fullCalls, 1)
+    // 单只可收蛋：首个 + 全部 两档合并为一条消息推送
+    assert.equal(result.pushed, 2)
+    assert.equal(sends, 1)
+  })
+  await test('home/home-pets-view-joins-and-sorts', () => {
+    const deps = { renderer: { resourceUrl: rel => 'file:///' + rel } }
+    const pending = Math.floor(Date.now() / 1000) + 7200
+    const payload = {
+      home_info: {
+        home_brief_info: { home_name: '测试小屋' },
+        cell_info: { home_pets: [
+          { home_pet_info: { pet_gid: 'g1', pet_cfg_id: 101, name: '展示甲' }, have_egg: false, predicted_egg_time: pending },
+          { home_pet_info: { pet_gid: 'g0', pet_cfg_id: 0, name: '守卫' }, is_guard: true },
+        ] },
+      },
+      npc_pets: [
+        { pet_gid: 'g1', status: 'ok', npc_pet: { pet: { base_conf_id: 101, name: '完全体甲', level: 88, gender: 2, weight: 35600, voice: 98, mutation_type: 1 } } },
+      ],
+    }
+    const data = query.buildHomePetsViewData(deps, payload, '123')
+    assert.equal(data.homeName, '测试小屋')
+    assert.equal(data.pets.length, 1)
+    const pet = data.pets[0]
+    assert.equal(pet.name, '完全体甲')
+    assert.equal(pet.genderText, '♀ 雌性')
+    assert.equal(pet.weightText, '35.6kg')
+    assert.ok(pet.voiceText.includes('婉转声'))
+    assert.equal(pet.variantText, '异色')
+    assert.ok(pet.starIconUrl.includes('star_1.png'))
+    assert.ok(pet.eggText.includes('后生蛋'))
+    assert.equal(data.eggCount, 0)
   })
   await test('permissions/independent-admin-switches', () => {
     const session = { isDirect: false, userId: 'U', user: { authority: 4 }, event: { member: { roles: ['admin'] } } }

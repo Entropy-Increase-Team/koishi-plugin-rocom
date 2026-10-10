@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-rocom",
   "description": "洛克王国查询与订阅插件",
-  "version": "1.0.19",
+  "version": "1.0.22",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "homepage": "https://github.com/staytomorrow/koishi-plugin-rocom",
@@ -22,6 +22,7 @@
     "test:alignment": "node tests/alignment-review.cjs",
     "test:player-response": "node tests/player-response-review.cjs",
     "test:render": "node tests/render-smoke.cjs",
+    "test:commands": "node tests/command-review.cjs",
     "pack:dry": "npm pack --dry-run",
     "prepack": "npm run build"
   },

@@ -5,6 +5,8 @@ import { EggService } from './egg-service'
 import { Renderer } from './render'
 import { WikiService } from './wiki-service'
 import { AtlasService } from './atlas-service'
+import { MerchantCatalogService } from './merchant-catalog'
+import { MerchantPriceLog } from './merchant-price-log'
 
 export interface PluginConfig {
   apiBaseUrl: string
@@ -16,11 +18,14 @@ export interface PluginConfig {
   merchantSubscriptionEnabled: boolean
   merchantSubscriptionItems: string[]
   merchantUiStyle: 'new' | 'old'
+  shareCodeUiStyle: 'panel' | 'classic'
+  homeDetailUiStyle: 'panel' | 'classic'
   merchantPrivateSubscriptionEnabled: boolean
   merchantCheckMode: 'interval' | 'times'
   merchantCheckInterval: number
   merchantCheckTimes: string[]
   merchantTimezone: string
+  merchantAllDayOnceEnabled: boolean
   subscriptionGroupAdminEnabled: boolean
   subscriptionBotAdminEnabled: boolean
   subscriptionBotAdminAuthority: number
@@ -50,4 +55,6 @@ export interface PluginDeps {
   renderer: Renderer
   wikiService: WikiService
   atlasService: AtlasService
+  merchantCatalog: MerchantCatalogService
+  merchantPriceLog: MerchantPriceLog
 }
