@@ -1,4 +1,4 @@
-// 家园详情（ingame pet/data）渲染数据构造（移植自上游 astrbot v3.6.1/v3.7.0）。
+// 家园详情（ingame pet/data）渲染数据构造。
 // 纯函数模块，便于单元测试。
 
 import { classifyWeight } from './pet-size'
@@ -89,7 +89,7 @@ export function petDataKgCompact(grams: any): string {
   return `${text}kg`
 }
 
-// 上游 v3.7.0：接入 Wiki 精灵体重范围，与查蛋共用同一判定。
+// 接入 Wiki 精灵体重范围，与查蛋共用同一判定。
 export function petDataWeightSizeInfo(pet: any, wikiPet: any): { label?: string, className?: string, hint?: string } {
   const bodySize = wikiPet && typeof wikiPet === 'object' ? wikiPet.body_size : null
   const weightRange = bodySize && typeof bodySize === 'object' ? bodySize.weight : null
@@ -469,7 +469,7 @@ export function buildPetDataRenderData(
   }
 }
 
-// ---------- 上游 WeGame rocom：家园详情 classic 模板（pet-detail-classic）视图 ----------
+// ---------- 家园详情 classic 模板（pet-detail-classic）视图 ----------
 
 export interface PetDetailClassicOptions {
   optionsPayload?: any

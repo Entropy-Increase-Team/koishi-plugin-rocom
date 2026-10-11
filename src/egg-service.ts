@@ -822,7 +822,7 @@ export class EggService {
     }
   }
 
-  // ─── 后端 Egg API 转换（上游 v3.8.0）───
+  // ─── 后端 Egg API 转换───
   buildCandidatesFromEggApi(keyword: string, candidates: any[]) {
     return {
       keyword,

@@ -48,7 +48,7 @@ export function wikiRangeLabel(data: any, keyMin: string, keyMax: string, unit: 
   return `${low}-${high}${unit}`
 }
 
-// 与上游 SequenceMatcher.ratio 近似：基于编辑距离的相似度。
+// 基于编辑距离的字符串相似度。
 export function similarityRatio(a: string, b: string): number {
   if (!a || !b) return 0
   if (a === b) return 1

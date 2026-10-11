@@ -64,7 +64,7 @@ function announcementSubscriptionKey(session: any): string {
   return [session?.platform || '', session?.channelId || 'private', privateChat ? (session?.userId || '') : '', 'announcement'].join(':')
 }
 
-// 上游 v3.2.0：轮询最新公告，向订阅会话推送新公告提醒。
+// 轮询最新公告，向订阅会话推送新公告提醒。
 async function checkAnnouncementSubscriptions(deps: PluginDeps, signal?: AbortSignal) {
   const { ctx, client, announcementSubMgr } = deps
   const subs = announcementSubMgr.getAll()

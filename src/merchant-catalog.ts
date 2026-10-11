@@ -4,7 +4,7 @@ import path from 'node:path'
 
 const logger = new Logger('rocom-merchant')
 
-// 上游 WeGame rocom：把后端商品池（merchant/info?random_goods=all）归一成带序号的目录，
+// 把后端商品池（merchant/info?random_goods=all）归一成带序号的目录，
 // 供「商人商品」列表展示与「订阅远行商人 1 3 5」按序号订阅使用。
 
 // 商品池变化很慢，内存缓存 6 小时，避免订阅轮询反复拉全量。

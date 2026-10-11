@@ -161,7 +161,7 @@ export function register(deps: PluginDeps) {
       const name = nameParts.join(' ')
       if (!name) return '请输入精灵名称。用法：洛克.查蛋 <精灵名>'
 
-      // 后端查蛋优先（上游 v3.8.0）：pet-groups → group-pets，接口不可用才回退 Wiki。
+      // 后端查蛋优先：pet-groups → group-pets，接口不可用才回退 Wiki。
       const userId = session?.userId || ''
       const eggCandidatesRes = await client.getEggPetGroups(ctx, name, 20, userId)
       if (eggCandidatesRes !== null) {

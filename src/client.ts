@@ -14,7 +14,7 @@ export type JsonObject = Record<string, unknown>
 export const isObject = (v: unknown): v is JsonObject =>
   v !== null && typeof v === 'object' && !Array.isArray(v)
 
-// 每剥离一层 envelope 时继承 goods_mapping，避免只改商品渲染后拿不到名称/图标（上游 v4.1.0）。
+// 每剥离一层 envelope 时继承 goods_mapping，避免只改商品渲染后拿不到名称/图标。
 export function inheritGoodsMapping<T extends JsonObject>(
   parent: JsonObject,
   child: T,
@@ -709,7 +709,7 @@ export class RocomClient {
     })
   }
 
-  // 玩家名片（上游 v4.1.0）：需要补充收集数/名片图时按需查询。
+  // 玩家名片：需要补充收集数/名片图时按需查询。
   async ingamePlayerCard(
     ctx: Context,
     uid: string,
@@ -817,7 +817,7 @@ export class RocomClient {
     )
   }
 
-  // 后端查蛋（上游 v3.8.0）：按展示身高/体重查询，参数名是 height/weight。
+  // 后端查蛋：按展示身高/体重查询，参数名是 height/weight。
   async searchEggBySize(
     ctx: Context,
     heightMeters: number,
@@ -840,7 +840,7 @@ export class RocomClient {
     )
   }
 
-  // 异色/炫彩收集排行榜（上游 v3.9.0）。
+  // 异色/炫彩收集排行榜。
   async getPetCollectionRanking(
     ctx: Context,
     rankType: 'shining' | 'glass',
@@ -866,7 +866,7 @@ export class RocomClient {
     )
   }
 
-  // 阵容分享码解析与历史查询（上游 v3.9.0）。
+  // 阵容分享码解析与历史查询。
   async parseShareCode(ctx: Context, shareCode: string, userIdentifier = '') {
     const code = String(shareCode || '').trim()
     if (!code) {
@@ -1103,7 +1103,7 @@ export class RocomClient {
     })
   }
 
-  // 远行商人实时接口（上游 v4.1.0）：优先 ingame live，返回 goods/shop/meta 或任务轮询结果。
+  // 远行商人实时接口：优先 ingame live，返回 goods/shop/meta 或任务轮询结果。
   // 未指定商店时不传 shop_id；调用方负责在新接口不可用时回退旧 merchant/info。
   async ingameMerchantInfo(
     ctx: Context,
@@ -1120,7 +1120,7 @@ export class RocomClient {
     })
   }
 
-  // 家园蛋状态轻量接口（上游 WeGame rocom）：只返回蛋相关数据，供蛋状态订阅轮询与即时查询。
+  // 家园蛋状态轻量接口：只返回蛋相关数据，供蛋状态订阅轮询与即时查询。
   async ingameHomeEggs(ctx: Context, uid: string, options: IngameTaskPollOptions & { auth?: IngameAuthContext } = {}) {
     const sanitizedUid = this.sanitizeUid(uid)
     if (!sanitizedUid && !options.auth?.fwToken) {
@@ -1137,7 +1137,7 @@ export class RocomClient {
     })
   }
 
-  // 家园精灵列表（上游 WeGame rocom）：走 home/pet-data 路径，返回侧重体重和声音的精灵一览。
+  // 家园精灵列表：走 home/pet-data 路径，返回侧重体重和声音的精灵一览。
   async ingameHomePetData(ctx: Context, uid: string, options: IngameTaskPollOptions & { auth?: IngameAuthContext } = {}) {
     const sanitizedUid = this.sanitizeUid(uid)
     if (!sanitizedUid && !options.auth?.fwToken) {
@@ -1154,7 +1154,7 @@ export class RocomClient {
     })
   }
 
-  // 家园详情：批量或单只查询家园摆放精灵的完整 ingame 数据（上游 v3.6.1）。
+  // 家园详情：批量或单只查询家园摆放精灵的完整 ingame 数据。
   // UID 参数名为 target_uin；单只查询需同时提供 pet_gid 和 npc_id。
   async ingamePetData(
     ctx: Context,
@@ -1218,7 +1218,7 @@ export class RocomClient {
     return this.get(ctx, '/api/v1/games/rocom/pet/detail', this.wegameHeaders(), params)
   }
 
-  // ===== 新版 RoCom Wiki API（上游 v3.6.0）=====
+  // ===== 新版 RoCom Wiki API=====
 
   private wikiPagedParams(q = '', pageNo = 1, pageSize = 10, filters: Record<string, any> = {}) {
     const params: Record<string, any> = {

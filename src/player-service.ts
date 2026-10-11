@@ -15,7 +15,7 @@ export type IngamePlayerPayload = {
   [key: string]: any
 }
 
-// 相对资源地址转绝对地址（上游 v4.1.0）；非字符串/非法协议返回空串，避免渲染裂图。
+// 相对资源地址转绝对地址；非字符串/非法协议返回空串，避免渲染裂图。
 export function resourceUrl(value: unknown, apiBaseUrl: string): string {
   if (typeof value !== 'string' || !value.trim()) return ''
   // `relative/` 是后端资源标记，不属于资源路径。
@@ -161,7 +161,7 @@ export interface PlayerView {
   cardImageUrl: string
 }
 
-// 合并搜索结果与名片结果；名片失败时保留基础信息（上游 v4.1.0）。
+// 合并搜索结果与名片结果；名片失败时保留基础信息。
 export function buildPlayerView(
   searchPayload: any,
   cardPayload: any,

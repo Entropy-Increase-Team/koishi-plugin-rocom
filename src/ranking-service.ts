@@ -68,7 +68,7 @@ function toInt(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? Math.trunc(n) : fallback
 }
 
-// 无时区的时间字符串按 +08:00 解释（与上游一致）。
+// 无时区的时间字符串按 +08:00 解释。
 export function formatRankingTime(value: unknown): string {
   const text = String(value ?? '').trim()
   if (!text) return '未知'

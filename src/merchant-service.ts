@@ -12,8 +12,8 @@ export interface MerchantItem {
   active: boolean
   category: string
   source: 'live' | 'legacy'
-  allDay: boolean        // 上游 v4.2.0：全天在售商品（跨多个 4 小时轮次）
-  itemId?: string        // 上游 v4.2.1：goods_mapping 物品 ID，缺图标时拼 Wiki 物品图
+  allDay: boolean        // 全天在售商品（跨多个 4 小时轮次）
+  itemId?: string        // goods_mapping 物品 ID，缺图标时拼 Wiki 物品图
   itemKind?: string
 }
 
@@ -28,7 +28,7 @@ export const numberOrNull = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null
 }
 
-// 价格可能直接是数字，也可能是 { real, origin } 或 { amount }（上游 v4.1.0）。
+// 价格可能直接是数字，也可能是 { real, origin } 或 { amount }。
 export function livePrice(value: any): number | null {
   const selected = value && typeof value === 'object'
     ? value.real ?? value.origin : value
@@ -45,16 +45,16 @@ export function merchantTimestampMs(value: any): number | null {
 }
 
 export interface MerchantNormalizeOptions {
-  // 上游 v4.2.0：仅知结束时间的全天判定需按商人时区取“当日秒数”。
+  // 仅知结束时间的全天判定需按商人时区取“当日秒数”。
   secondsOfDay?: (ms: number) => number
-  // 上游 v4.2.1：接口缺图标时按 item_id/item_kind 拼 Wiki 公共物品图，以及本地兜底图。
+  // 接口缺图标时按 item_id/item_kind 拼 Wiki 公共物品图，以及本地兜底图。
   assetBaseUrl?: string
   fallbackIcon?: string
 }
 
 const MERCHANT_ROUND_SPAN_MS = 4 * 3600_000
 
-// 上游 v4.2.0：按接口真实字段判定商品是否全天在售，而非 4 小时轮次商品。
+// 按接口真实字段判定商品是否全天在售，而非 4 小时轮次商品。
 // - 实时接口带 next_refresh_time 的商品随轮次刷新，属于 4 小时商品；
 // - 旧接口 round 字段：0 表示全天在售，1/2/3/4 表示对应 4 小时轮次；
 // - 已知起止时间时，有效时长超过单轮 4 小时即视为全天商品；
@@ -80,7 +80,7 @@ export function isAllDayMerchantProduct(
   return false
 }
 
-// 上游 v4.2.1：实时接口不返回商品图片地址时，按 goods_mapping 的 item_id/item_kind
+// 实时接口不返回商品图片地址时，按 goods_mapping 的 item_id/item_kind
 // 使用 Wiki 公共物品图，避免商品图片 404。
 export function wikiItemAssetUrl(baseUrl: string | undefined, itemId: unknown, itemKind: unknown): string {
   const idText = String(itemId ?? '').trim()
@@ -96,7 +96,7 @@ function resolveMerchantIcon(direct: string, itemId: unknown, itemKind: unknown,
   return wikiUrl || String(options.fallbackIcon || '')
 }
 
-// 上游 v4.2.0：同一商品可能同时出现在多个分组，只有全部出现均为全天时才按全天去重。
+// 同一商品可能同时出现在多个分组，只有全部出现均为全天时才按全天去重。
 export function collectAllDayProductNames(items: Array<{ name?: string, allDay?: boolean }>): Set<string> {
   const flags = new Map<string, boolean[]>()
   for (const item of items) {

@@ -207,7 +207,7 @@ export class Renderer {
         try {
           await page.evaluate(async (waitImageMs: number, waitFontMs: number) => {
             const images = Array.from(document.images)
-            // 限制远程图片等待时间，避免慢速资源拖垮整次渲染（对应上游 v3.7.1）。
+            // 限制远程图片等待时间，避免慢速资源拖垮整次渲染。
             await Promise.race([
               Promise.all(images.map((img) => {
                 if (img.complete) return Promise.resolve()
@@ -302,7 +302,7 @@ export class Renderer {
             await delay(100, options.signal)
 
             // 居中（margin auto）模板在视口调整后 x/y 会变化，截图前需要重新测量，
-            // 否则 clip 会带着旧偏移导致画面左侧被截断（对应上游 v3.7.5 修复）。
+            // 否则 clip 会带着旧偏移导致画面左侧被截断。
             try {
               const remeasured = await page.evaluate((el: Element, visualBounds: boolean) => {
                 const rect = el.getBoundingClientRect()

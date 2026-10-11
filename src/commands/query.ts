@@ -921,7 +921,7 @@ function extractHomePet(deps: PluginDeps, raw: any, index: number, guard = false
   const feedRound = Number(homePet.feed_round || raw.feed_round || 0) || 0
   const gender = Number(display.gender || raw.gender || 0) || 0
   let mutationType = Number(display.mutation_type || raw.mutation_type || homePet.mutation_type || 0) || 0
-  // 上游 v3.4.0：mutation_type 缺失时按 real_speciality_ids 识别变体（103=异色、502=炫彩、两者兼有=异色炫彩）。
+  // mutation_type 缺失时按 real_speciality_ids 识别变体（103=异色、502=炫彩、两者兼有=异色炫彩）。
   if (!mutationType) {
     const specialityValues: any[] = []
     for (const value of [homePet.real_speciality_ids, raw.real_speciality_ids, homePet.speciality_id, raw.speciality_id]) {
@@ -1389,7 +1389,7 @@ async function subscribeHome(deps: PluginDeps, session: any, uid: string, kind: 
     guild_id: session?.guildId || '',
     user_id: target.userId,
     updated_by: session?.userId || '',
-    // 上游 WeGame rocom：群订阅支持命中后 @全体；未显式指定时沿用上次设置。
+    // 群订阅支持命中后 @全体；未显式指定时沿用上次设置。
     mention_all: target.userId ? false : (mentionAll ?? existing?.mention_all ?? false),
     notify_state: existing?.notify_state || {},
     updated_at: Math.floor(Date.now() / 1000),
@@ -1399,7 +1399,7 @@ async function subscribeHome(deps: PluginDeps, session: any, uid: string, kind: 
   return [`已订阅 UID ${targetUid} ${HOME_SUB_TEXT[kind].subscribedHint}`, mentionHint].filter(Boolean).join('')
 }
 
-// 上游 WeGame rocom：订阅家园 的 @全体 写法与 UID 解析。
+// 订阅家园 的 @全体 写法与 UID 解析。
 const HOME_MENTION_ALL_ALIASES = new Set(['@全体', '全体', '@所有人', 'at全体', 'at所有人'])
 
 function parseHomeSubscribeArgs(args: string | undefined) {
@@ -1455,7 +1455,7 @@ function extractHomeEggPet(item: any, nowTs: number): HomeEggPetStatus | null {
 }
 
 /**
- * 从 home/eggs 轻量接口响应中提取蛋状态（上游 WeGame rocom）。
+ * 从 home/eggs 轻量接口响应中提取蛋状态。
  * 接口仍在开发中，这里对多种可能的字段名做兼容。
  */
 export function extractHomeEggStatus(payload: any): { readyCount: number, totalEggs: number, pets: HomeEggPetStatus[] } {
@@ -1515,7 +1515,7 @@ function buildHomeEggStatusText(uid: string, status: ReturnType<typeof extractHo
   return lines.join('\n')
 }
 
-// 上游 WeGame rocom：家园精灵一览（home/pet-data），汇总体重、声音、变异与生蛋状态。
+// 家园精灵一览（home/pet-data），汇总体重、声音、变异与生蛋状态。
 function collectHomePetsViewSources(homeInfo: any, payload: any): any[] {
   const containers = [homeInfo?.friend_cell_home_brief_info, homeCellInfo(homeInfo), homeInfo?.cell_info, homeInfo, payload?.friend_cell_home_brief_info]
   const result: any[] = []
@@ -1606,7 +1606,7 @@ function buildHomePetsViewData(deps: PluginDeps, res: any, uid: string) {
     const genderText = gender === 1 ? '♂ 雄性' : gender === 2 ? '♀ 雌性' : '未知'
     let mutationType = Number(pet?.mutation_type ?? displayInfo?.mutation_type ?? 0) || 0
     if (!mutationType) {
-      // 与 extractHomePet 相同的变体兜底（上游 v3.4.0：real_speciality_ids 103=异色、502=炫彩）。
+      // 与 extractHomePet 相同的变体兜底（real_speciality_ids 103=异色、502=炫彩）。
       const specialityValues: any[] = []
       for (const value of [homePetInfo.real_speciality_ids, npcRaw.real_speciality_ids, homePetInfo.speciality_id, npcRaw.speciality_id]) {
         if (Array.isArray(value)) specialityValues.push(...value)
@@ -1727,7 +1727,7 @@ async function checkHomeSubscriptions(deps: PluginDeps, signal?: AbortSignal) {
 
     let state: { items: any[], readyItems: any[], names: string[] } | null = null
     if (sub.kind === 'egg') {
-      // 上游 WeGame rocom：蛋状态订阅走轻量 home/eggs 接口，降低轮询开销。
+      // 蛋状态订阅走轻量 home/eggs 接口，降低轮询开销。
       if (!eggsCache.has(sub.uid)) {
         eggsCache.set(sub.uid, await deps.client.ingameHomeEggs(deps.ctx, sub.uid, { timeoutMs: 30000, signal }).catch(() => null))
       }
@@ -1767,7 +1767,7 @@ async function checkHomeSubscriptions(deps: PluginDeps, signal?: AbortSignal) {
     const messages = pushLevels.map(level => homeSubscriptionMessage(label, sub.kind, level, totalCount, readyItems, names))
     try {
       const body = messages.join('\n\n')
-      // 上游 WeGame rocom：群订阅 mention_all 开启时命中后 @全体。
+      // 群订阅 mention_all 开启时命中后 @全体。
       const content = !sub.user_id && sub.mention_all
         ? [h('at', { type: 'all' }), h.text('\n' + body)]
         : (!sub.user_id && notifyUser ? [h.at(notifyUser), h.text('\n' + body)] : body)
@@ -1958,7 +1958,7 @@ export function register(deps: PluginDeps) {
         profileStatusText,
         profileStatusClass: profileStatusText === '是' ? 'online' : 'offline',
         commandHint: '洛克.背包 <筛选> <页码> | 洛克.战绩 <页码> | 洛克 查看菜单',
-        copyright: 'AstrBot & WeGame Locke Kingdom Plugin',
+        copyright: 'Koishi & WeGame Roco Kingdom Plugin',
       }
 
       if (recentBattle) {
@@ -2336,7 +2336,7 @@ export function register(deps: PluginDeps) {
       }
 
       const lowBandwidth = Boolean(deps.config.lowBandwidthMode)
-      // 上游 WeGame rocom：classic 样式走 pet-detail-classic 模板（立绘 + 属性表 + 技能栏），
+      // classic 样式走 pet-detail-classic 模板（立绘 + 属性表 + 技能栏），
       // 不需要精灵体重范围（sizeLookup）。
       const useClassic = deps.config.homeDetailUiStyle !== 'panel'
       const [optionsPayload, skillLookup, sizeLookup] = await Promise.all([
@@ -2404,7 +2404,7 @@ export function register(deps: PluginDeps) {
       })
     })
 
-  // 上游 WeGame rocom：家园精灵一览（home/pet-data），体重、声音、变异与生蛋状态。
+  // 家园精灵一览（home/pet-data），体重、声音、变异与生蛋状态。
   ctx.command('洛克').subcommand('.家园精灵 [uid:string]', '查看家园精灵列表（体重、声音、生蛋状态）')
     .alias('洛克家园精灵')
     .alias('家园精灵')
@@ -2442,7 +2442,7 @@ export function register(deps: PluginDeps) {
       })
     })
 
-  // 上游 WeGame rocom：立即查询指定 UID 的家园蛋状态。
+  // 立即查询指定 UID 的家园蛋状态。
   ctx.command('洛克').subcommand('.家园状态 [uid:string]', '查询家园蛋状态（可收蛋精灵与倒计时）')
     .alias('洛克家园状态')
     .alias('家园状态')
@@ -2596,7 +2596,7 @@ export function register(deps: PluginDeps) {
       return subscribeHome(deps, session, parsed.uid, 'egg', parsed.mentionAll)
     })
 
-  // 上游 WeGame rocom：查看当前会话的家园订阅列表。
+  // 查看当前会话的家园订阅列表。
   ctx.command('我的家园订阅', '查看当前会话的家园订阅列表')
     .userFields(['authority'])
     .action(async ({ session }) => {

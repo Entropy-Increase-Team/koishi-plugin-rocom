@@ -231,7 +231,7 @@ function getCurrentMerchantRound(now: Date = new Date()): MerchantRoundInfo {
   }
 }
 
-// 上游 WeGame rocom：@全体 的写法。
+// @全体 的写法。
 const MENTION_ALL_ALIASES = new Set(['@全体', '全体', '@所有人', 'at全体', 'at所有人'])
 
 type MerchantSubscriptionArgs = {
@@ -251,7 +251,7 @@ function parseMerchantSubscriptionArgs(args: string | undefined, defaultItems: s
   if (parts[0] === '1' || parts[0] === '0') {
     mentionAll = parts.shift() === '1'
   }
-  // 支持「订阅远行商人 @全体 1 3」写法（上游 WeGame rocom）。
+  // 支持「订阅远行商人 @全体 1 3」写法。
   for (let i = parts.length - 1; i >= 0; i--) {
     if (MENTION_ALL_ALIASES.has(parts[i].toLowerCase())) {
       mentionAll = true
@@ -279,7 +279,7 @@ function isBotAdmin(session: any, adminUserIds: string[]) {
   return adminUserIds.includes(session?.userId || '')
 }
 
-// 订阅管理权限：群主/管理员与 Bot 管理员按独立开关生效（上游 v4.0）。
+// 订阅管理权限：群主/管理员与 Bot 管理员按独立开关生效。
 function canManageGroupSubscription(deps: PluginDeps, session: any) {
   return canManageSubscription(deps.config, session)
 }
@@ -311,7 +311,7 @@ function normalizeMerchantProducts(res: any, now = new Date(), options?: Merchan
   })
 }
 
-// 上游 WeGame rocom：实时接口只给当前轮次的价格，轮次一过就拿不到了；
+// 实时接口只给当前轮次的价格，轮次一过就拿不到了；
 // 每次拿到实时数据先按 goods_id + 轮次落盘，供当天后续轮次补价。
 function recordLiveMerchantPrices(deps: Partial<PluginDeps>, res: any, now = new Date()) {
   const priceLog = deps.merchantPriceLog
@@ -337,7 +337,7 @@ function recordLiveMerchantPrices(deps: Partial<PluginDeps>, res: any, now = new
     return Number.isFinite(num) && num > 0 ? num : 0
   }
 
-  // 轮次判定对齐上游 resolveRealtimeWindow：带 next_refresh_time 的随轮次刷新，缺省视为全天（round 0）。
+  // 轮次判定：带 next_refresh_time 的随轮次刷新，缺省视为全天（round 0）。
   const roundOf = (raw: any): number => {
     const refreshAt = merchantTimestampMs(raw?.next_refresh_time)
     if (!refreshAt) return 0
@@ -369,7 +369,7 @@ function recordLiveMerchantPrices(deps: Partial<PluginDeps>, res: any, now = new
 }
 
 // 今日远行商人：历史轮次商品在实时接口拿不到价格（旧接口 random_goods 恒为 0），
-// 用当天记录下来的实时价格补上（上游 WeGame rocom）。
+// 用当天记录下来的实时价格补上。
 function backfillTodayPrices(priceLog: MerchantPriceLog | undefined, products: MerchantProductForRender[], now = new Date()) {
   if (!priceLog) return products
   for (const product of products) {
@@ -517,7 +517,7 @@ function getMerchantDateStr(now = new Date()) {
   return `${parts.month}.${parts.day}`
 }
 
-// 上游 v4.2.1：商品缺图标时按 item_id/item_kind 拼 Wiki 物品图，仍缺失时用本地 logo 兜底。
+// 商品缺图标时按 item_id/item_kind 拼 Wiki 物品图，仍缺失时用本地 logo 兜底。
 function merchantViewOptions(deps: Partial<PluginDeps>): MerchantNormalizeOptions {
   const secondsOfDay = (ms: number) => {
     const parts = getChinaParts(ms)
@@ -651,14 +651,14 @@ function buildConfiguredTodayMerchantRenderPayload(deps: PluginDeps, res: any, n
   })
 }
 
-// 上游 v4.2.0：读取订阅当日已推送的全天商品名集合（跨天自动失效）。
+// 读取订阅当日已推送的全天商品名集合（跨天自动失效）。
 function getAlldayPushedNames(sub: MerchantSubscription, todayKey: string): Set<string> {
   const state = sub.allday_pushed
   if (!state || state.date !== todayKey) return new Set()
   return new Set((state.names || []).map(String))
 }
 
-// 上游 v4.2.0：把本次推送命中的全天商品记入当日已推送状态。
+// 把本次推送命中的全天商品记入当日已推送状态。
 function recordAlldayPushed(sub: MerchantSubscription, todayKey: string, names: string[]): MerchantSubscription['allday_pushed'] {
   const existing = sub.allday_pushed?.date === todayKey ? [...(sub.allday_pushed.names || [])] : []
   for (const name of names) {
@@ -675,7 +675,7 @@ async function checkMerchantSubscriptions(deps: PluginDeps, signal?: AbortSignal
   if (signal?.aborted) return { subscriptions: 0, matched: 0, pushed: 0, kind: 'cancelled' as const }
   const res = await client.getMerchantInfo(ctx, true, { signal })
   if (signal?.aborted) return { subscriptions: 0, matched: 0, pushed: 0, kind: 'cancelled' as const }
-  // 上游 v4.2.1：接口失败视为空结果等待稍后重试，不再发送空商品图片。
+  // 接口失败视为空结果等待稍后重试，不再发送空商品图片。
   if (!res) {
     logger.warn(`远行商人订阅查询失败：${client.getLastErrorBrief?.() || '接口无返回'}，等待重试`)
     return { subscriptions: Object.keys(subs).length, matched: 0, pushed: 0, kind: 'error' as const }
@@ -685,7 +685,7 @@ async function checkMerchantSubscriptions(deps: PluginDeps, signal?: AbortSignal
   const { products, roundInfo, data, fallback, templateName } = buildConfiguredMerchantRenderPayload(deps, res)
   if (!products.length) return { subscriptions: Object.keys(subs).length, matched: 0, pushed: 0, kind: 'empty' as const }
   const productNames = products.map((p: any) => p.name || '').filter(Boolean)
-  // 上游 v4.2.0：开启后全天商品每个订阅每天只推送一次；仅作用于按商品名订阅的推送，
+  // 开启后全天商品每个订阅每天只推送一次；仅作用于按商品名订阅的推送，
   // “全部商品”订阅仍是每轮推送整张商人图。
   const alldayNames = config.merchantAllDayOnceEnabled ? collectAllDayProductNames(products) : new Set<string>()
   const todayKey = new MerchantClock(config.merchantTimezone || 'Asia/Shanghai').date()
@@ -703,7 +703,7 @@ async function checkMerchantSubscriptions(deps: PluginDeps, signal?: AbortSignal
       : sub.items.filter((item: string) => productNames.some(n => n.includes(item)))
     if (!matchAll && !matched.length) continue
     if (matchAll && !products.length) continue
-    // 上游 v4.2.0：当天已推送过的全天商品不再计入本轮命中，全部被剔除则本轮不推送。
+    // 当天已推送过的全天商品不再计入本轮命中，全部被剔除则本轮不推送。
     // 订阅词条按子串匹配商品名，只有词条命中的商品全部为全天时才按全天去重。
     const onlyAlldayItem = (item: string) => {
       if (!alldayNames.size) return false
@@ -787,7 +787,7 @@ export function register(deps: PluginDeps) {
       await sendImageWithFallback(session, png, fallback, 'merchant:yuanxing-shangren:today', deps.config)
     })
 
-  // 上游 WeGame rocom：查看商品目录与订阅序号。
+  // 查看商品目录与订阅序号。
   ctx.command('商人商品', '查看远行商人商品列表与订阅序号')
     .alias('洛克.商人商品')
     .alias('洛克商人商品')
@@ -813,7 +813,7 @@ export function register(deps: PluginDeps) {
       if (target.privateChat && !config.merchantPrivateSubscriptionEnabled) return '个人私聊订阅功能已被禁用，请联系机器人管理员。'
       const parsed = parseMerchantSubscriptionArgs(args, config.merchantSubscriptionItems)
       const existing = merchantSubMgr.get(target.key)
-      // 上游 WeGame rocom：序号 / 商品名 / 全部 都经商品目录解析，序号命中后换成规范名落盘。
+      // 序号 / 商品名 / 全部 都经商品目录解析，序号命中后换成规范名落盘。
       const catalog = await deps.merchantCatalog.getCatalog()
       const resolved = resolveMerchantSelection(parsed.tokens, catalog)
       const matchAll = parsed.match_all || resolved.all
@@ -824,7 +824,7 @@ export function register(deps: PluginDeps) {
           `先用 商人商品 查看商品序号，再按序号或名称订阅。`,
         ].join('\n')
       }
-      // 上游 WeGame rocom：不带商品参数重复订阅时，沿用上次配置（全部模式或商品列表），
+      // 不带商品参数重复订阅时，沿用上次配置（全部模式或商品列表），
       // 而不是悄悄重置成配置默认商品。
       let sourceHint: string
       let items: string[]
@@ -842,7 +842,7 @@ export function register(deps: PluginDeps) {
         sourceHint = '默认商品配置'
       }
       const matchAllFinal = matchAll || (resolved.names.length === 0 && !hasInput && existing?.match_all === true)
-      // 未显式指定 1/0 或 @全体 时沿用上次设置（上游 WeGame rocom）。
+      // 未显式指定 1/0 或 @全体 时沿用上次设置。
       const mentionAll = target.privateChat
         ? false
         : (parsed.mentionAll === null ? (existing?.mention_all ?? false) : parsed.mentionAll)
@@ -921,7 +921,7 @@ export function register(deps: PluginDeps) {
       if (signal.aborted || (retry > 0 && roundKey() !== round)) return
       if (!Object.keys(merchantSubMgr.getAll()).length) return
       const result = await checkMerchantSubscriptions(deps, signal)
-      // 上游 v4.2.1：接口失败与空结果一样等待稍后重试，避免直接放弃本轮推送。
+      // 接口失败与空结果一样等待稍后重试，避免直接放弃本轮推送。
       if ((result.kind !== 'empty' && result.kind !== 'error') || retry === 3) return
       await delay(240000 + Math.floor(Math.random() * 60001) - 30000, signal)
     }

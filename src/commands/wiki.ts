@@ -134,7 +134,7 @@ export function register(deps: PluginDeps) {
       let lastPercent = -20
       try {
         const { imageCount, totalBytes } = await atlasService.download(ctx, async (percent, stage) => {
-          // 20% 粒度进度提醒（对应上游行为）
+          // 20% 粒度进度提醒
           if (percent - lastPercent >= 20 || percent >= 100) {
             lastPercent = percent
             await session?.send?.(`图鉴下载进度 ${percent}%：${stage}`)

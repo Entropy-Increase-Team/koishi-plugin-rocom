@@ -1,4 +1,4 @@
-// 新版 RoCom Wiki 目录路由表（移植自上游 astrbot v3.6.0 core/wiki_catalog.py）。
+// 新版 RoCom Wiki 目录路由表。
 // list_path 由后端 /wiki/catalogs 实时下发；这里只维护详情路径、ID 字段与别名。
 
 export interface WikiCatalog {

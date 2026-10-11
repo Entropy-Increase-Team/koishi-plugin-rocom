@@ -109,7 +109,7 @@ function normalizeTeam(value: any, index: number, baseUrl: string) {
   return {
     slot: toInt(team.slot, index + 1),
     pet,
-    // 上游 WeGame rocom：精灵属性名列表，供信笺风模板显示属性图标。
+    // 精灵属性名列表，供信笺风模板显示属性图标。
     typeNames: (Array.isArray((team.pet as any)?.type_names) ? (team.pet as any).type_names as string[] : [])
       .map((item: any) => String(item ?? '').trim())
       .filter(Boolean),
@@ -193,7 +193,7 @@ export function buildShareCodeText(data: any): string {
   return lines.join('\n')
 }
 
-// ---------- 上游 WeGame rocom：信笺风阵容分享模板（share-code-classic）视图 ----------
+// ---------- 信笺风阵容分享模板（share-code-classic）视图 ----------
 
 export interface ShareCodeClassicAssets {
   frame: string

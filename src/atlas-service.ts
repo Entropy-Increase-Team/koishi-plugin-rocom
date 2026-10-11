@@ -157,7 +157,7 @@ export class AtlasService {
     return text
   }
 
-  // 解析上游简单结构的 pets.yaml：`正式名:` + 缩进 `- 别名` 列表。
+  // 解析简单结构的 pets.yaml：`正式名:` + 缩进 `- 别名` 列表。
   loadPetAliases(): Record<string, string[]> {
     const filePath = this.aliasPath()
     if (!fs.existsSync(filePath)) return {}

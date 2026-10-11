@@ -18,7 +18,7 @@ export function register(deps: PluginDeps) {
     await sendImageWithFallback(session, image, fallback, `share-code:${template}`, config)
   }
 
-  // 上游 WeGame rocom：信笺风模板（share-code-classic）的本地素材与 Wiki 性格映射。
+  // 信笺风模板（share-code-classic）的本地素材与 Wiki 性格映射。
   const useClassic = config.shareCodeUiStyle !== 'panel'
   const classicAssets = (): ShareCodeClassicAssets => {
     const root = 'render-templates/share-code-classic/assets'

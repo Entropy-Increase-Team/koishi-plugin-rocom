@@ -4,7 +4,7 @@ import path from 'node:path'
 
 const logger = new Logger('rocom-merchant')
 
-// 上游 WeGame rocom：实时接口只返回当前轮次的商品价格，轮次一过就拿不到了；
+// 实时接口只返回当前轮次的商品价格，轮次一过就拿不到了；
 // 旧接口 random_goods[].price 恒为 0。把每轮观察到的实时价格按 goods_id + 轮次
 // 记下来，供当天后续轮次补价。按游戏内自然日（Asia/Shanghai）分桶，跨天自动清空。
 

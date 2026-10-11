@@ -8,7 +8,7 @@ interface HomeEggPetStatus {
     hasEgg: boolean;
 }
 /**
- * 从 home/eggs 轻量接口响应中提取蛋状态（上游 WeGame rocom）。
+ * 从 home/eggs 轻量接口响应中提取蛋状态。
  * 接口仍在开发中，这里对多种可能的字段名做兼容。
  */
 export declare function extractHomeEggStatus(payload: any): {

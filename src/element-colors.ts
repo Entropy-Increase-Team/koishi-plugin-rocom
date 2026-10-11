@@ -1,4 +1,4 @@
-// 上游 WeGame rocom 的元素配色表，供信笺风阵容分享与家园详情 classic 模板共用。
+// 元素配色表，供信笺风阵容分享与家园详情 classic 模板共用。
 export const ELEMENT_COLORS: Record<string, string> = {
   草: '#4ebc73',
   火: '#db5525',

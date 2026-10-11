@@ -25,7 +25,7 @@ export interface MerchantSubscription {
   items: string[]
   last_push_round: string | null
   last_matched_items: string[]
-  // 上游 v4.2.0：全天商品当日已推送记录，跨天自动失效。
+  // 全天商品当日已推送记录，跨天自动失效。
   allday_pushed?: { date: string, names: string[] }
   updated_by: string
 }
@@ -42,7 +42,7 @@ export interface HomeSubscription {
   guild_id?: string
   user_id?: string
   updated_by: string
-  // 上游 WeGame rocom：群订阅命中后尝试 @全体。
+  // 群订阅命中后尝试 @全体。
   mention_all?: boolean
   notify_state: {
     first?: boolean
