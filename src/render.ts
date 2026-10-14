@@ -35,6 +35,7 @@ const TEMPLATE_VIEWPORTS: Record<string, TemplateViewport> = {
 
 const VISUAL_BOUNDS_TEMPLATES = new Set([
   'home',
+  'home-pets',
   'yuanxing-shangren/merchant',
   'yuanxing-shangren/today',
 ])
