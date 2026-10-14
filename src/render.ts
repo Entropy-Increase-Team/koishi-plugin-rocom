@@ -28,6 +28,9 @@ const TEMPLATE_CAPTURE_PADDING: Record<string, CapturePadding> = {
 
 const TEMPLATE_VIEWPORTS: Record<string, TemplateViewport> = {
   activities: { width: 1600, height: 1200, deviceScaleFactor: 2 },
+  // 商人卡片模板按原生尺寸渲染：视口 960 + deviceScaleFactor 4 → 3840 物理像素输出
+  'yuanxing-shangren/merchant': { width: 960, height: 1600, deviceScaleFactor: 4 },
+  'yuanxing-shangren/today': { width: 960, height: 1600, deviceScaleFactor: 4 },
 }
 
 const VISUAL_BOUNDS_TEMPLATES = new Set([

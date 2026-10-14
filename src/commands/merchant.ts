@@ -11,6 +11,7 @@ import { canManageSubscription, isDirectSession } from '../permissions'
 import { createRunner } from '../subscription-runner'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { delay } from '../async-control'
+import { buildIconFit, readImageMetrics, type ImageMetrics } from '../icon-metrics'
 
 const logger = new Logger('rocom-merchant')
 
@@ -85,6 +86,56 @@ type LegacyMerchantRoundGroup = {
   is_current: boolean
   products: MerchantProductForRender[]
 }
+
+// 商人卡片按原生尺寸渲染：1080 设计稿缩到 1/4 排版，再整体 zoom 放大；
+// 视口宽 960 + deviceScaleFactor 4 → 3840 物理像素输出。
+const MERCHANT_CARD_SOURCE_WIDTH = 1080
+const MERCHANT_CARD_LAYOUT_SCALE = 0.25
+const MERCHANT_CARD_OUTPUT_WIDTH = 3840
+const MERCHANT_CARD_DEVICE_SCALE_FACTOR = 4
+const MERCHANT_CARD_RENDER_SCALE = MERCHANT_CARD_LAYOUT_SCALE
+const MERCHANT_CARD_RENDER_WIDTH = Math.ceil(MERCHANT_CARD_OUTPUT_WIDTH / MERCHANT_CARD_DEVICE_SCALE_FACTOR)
+const MERCHANT_CARD_OUTPUT_SCALE = MERCHANT_CARD_RENDER_WIDTH / MERCHANT_CARD_SOURCE_WIDTH
+const MERCHANT_CARD_RENDER_BASE_WIDTH = MERCHANT_CARD_SOURCE_WIDTH * MERCHANT_CARD_LAYOUT_SCALE
+const MERCHANT_CARD_RENDER_ZOOM = MERCHANT_CARD_RENDER_WIDTH / MERCHANT_CARD_RENDER_BASE_WIDTH
+const MERCHANT_CARD_STROKE_11 = 11 * MERCHANT_CARD_RENDER_SCALE
+const MERCHANT_CARD_STROKE_10 = 10 * MERCHANT_CARD_RENDER_SCALE
+const MERCHANT_CARD_OFFSET_3 = 3 * MERCHANT_CARD_RENDER_SCALE
+// 今日卡片商品名只有 8.5px，沿用 11 倍描边半径会把字糊成一坨，单独用小半径
+const MERCHANT_TODAY_NAME_STROKE = 3 * MERCHANT_CARD_RENDER_SCALE
+
+// 单件商品卡里 .goods-img-wrap 的尺寸（模板基准 px），图标等面积归一的框；
+// 「不透明内容」统一缩放到的面积约等于 55×55 方图，再大细长商品会溢出图标框。
+const MERCHANT_ICON_BOX_WIDTH = 74
+const MERCHANT_ICON_BOX_HEIGHT = 61.5
+const MERCHANT_ICON_TARGET_AREA = 3000
+// 单个图标取图超时；取不到就按原样渲染，不影响出卡片
+const MERCHANT_ICON_FETCH_TIMEOUT_MS = 8000
+const MERCHANT_CARD_ICON_BOX = {
+  width: MERCHANT_ICON_BOX_WIDTH,
+  height: MERCHANT_ICON_BOX_HEIGHT,
+  targetArea: MERCHANT_ICON_TARGET_AREA,
+}
+
+// 今日卡片一轮一行：每行左侧轮次标签，右侧最多并排 5 件商品。
+// 列宽固定（不随该轮商品数变化），否则同一张卡片里图标大小又会参差；
+// 一轮超过 5 件时整行一起收窄、图标框跟着缩，保证不溢出行宽。
+const MERCHANT_TODAY_START_Y = 592
+const MERCHANT_TODAY_ROW_HEIGHT = 368
+const MERCHANT_TODAY_ROW_GAP = 32
+// 底部信息框压在最后一行下沿 21px（沿用旧版 bottomFrameTop = lastTop + 287 算法），
+// 写成正间距会在末尾留出一大片空白。
+const MERCHANT_TODAY_FRAME_OVERLAP = 21
+const MERCHANT_TODAY_ROW_WIDTH = 260.75
+const MERCHANT_TODAY_TAB_WIDTH = 38
+const MERCHANT_TODAY_MAX_COLUMNS = 5
+const MERCHANT_TODAY_CELL_WIDTH = (MERCHANT_TODAY_ROW_WIDTH - MERCHANT_TODAY_TAB_WIDTH) / MERCHANT_TODAY_MAX_COLUMNS
+// 今日卡片的商品图标框（模板 .item-icon-wrap）；等面积归一基准，行收窄时按面积比缩小
+const MERCHANT_TODAY_ICON_SIZE = 40
+const MERCHANT_TODAY_ICON_TARGET_AREA = 1150
+
+// 图标尺寸按「去掉签名参数的地址」缓存，避免每次出卡片重复取图；失败缓存 null 不再重试。
+const iconMetricsCache = new Map<string, ImageMetrics | null>()
 
 const defaultClock = new MerchantClock('Asia/Shanghai')
 // Scoped to each synchronous view build; plugin instances never overwrite another clock.
@@ -383,14 +434,99 @@ function backfillTodayPrices(priceLog: MerchantPriceLog | undefined, products: M
   return products
 }
 
-function buildMerchantCardItems(
+export function buildMerchantRenderParams(pageHeight: number) {
+  return {
+    pageHeight,
+    renderWidth: MERCHANT_CARD_RENDER_WIDTH,
+    renderHeight: Math.ceil(pageHeight * MERCHANT_CARD_OUTPUT_SCALE),
+    renderBaseWidth: MERCHANT_CARD_RENDER_BASE_WIDTH,
+    renderBaseHeight: pageHeight * MERCHANT_CARD_LAYOUT_SCALE,
+    renderScale: MERCHANT_CARD_RENDER_SCALE,
+    renderZoom: MERCHANT_CARD_RENDER_ZOOM,
+    renderDeviceScaleFactor: MERCHANT_CARD_DEVICE_SCALE_FACTOR,
+    renderStroke11: MERCHANT_CARD_STROKE_11,
+    renderStroke10: MERCHANT_CARD_STROKE_10,
+    renderStrokeName: MERCHANT_TODAY_NAME_STROKE,
+    renderOffset3: MERCHANT_CARD_OFFSET_3,
+  }
+}
+
+/** 把图标换算成模板用的 transform；没有测量结果就原样渲染。 */
+function buildMerchantIconStyle(
+  iconUrl: string,
+  iconMetrics: Map<string, ImageMetrics> | undefined,
+  box = MERCHANT_CARD_ICON_BOX,
+) {
+  const fallback = { iconScale: 1, iconOffsetX: 0, iconOffsetY: 0 }
+  const url = String(iconUrl || '').trim()
+  if (!url || !iconMetrics) return fallback
+
+  const fit = buildIconFit(iconMetrics.get(url), box)
+  return fit
+    ? { iconScale: fit.scale, iconOffsetX: fit.offsetX, iconOffsetY: fit.offsetY }
+    : fallback
+}
+
+async function measureMerchantIcon(deps: PluginDeps, url: string): Promise<ImageMetrics | null> {
+  const cacheKey = String(url || '').trim().split('?')[0]
+  if (!cacheKey) return null
+  if (iconMetricsCache.has(cacheKey)) return iconMetricsCache.get(cacheKey) ?? null
+
+  let metrics: ImageMetrics | null = null
+  try {
+    if (!deps.ctx?.http) throw new Error('http service unavailable')
+    const response: any = await (deps.ctx.http as any)('GET', url, {
+      responseType: 'arraybuffer',
+      timeout: MERCHANT_ICON_FETCH_TIMEOUT_MS,
+    })
+    const status = Number(response?.status) || 0
+    if (status >= 400) throw new Error(`HTTP ${status}`)
+    const body = response?.data
+    metrics = readImageMetrics(Buffer.isBuffer(body) ? body : Buffer.from(body || []))
+  } catch (error: any) {
+    logger.warn(`读取商品图标失败（${cacheKey}）：${error?.message || error}`)
+  }
+
+  iconMetricsCache.set(cacheKey, metrics)
+  return metrics
+}
+
+/** 批量量图标，返回 Map<icon_url, metrics>；个别失败只是缺那一条。 */
+async function collectMerchantIconMetrics(deps: PluginDeps, urls: Iterable<string>): Promise<Map<string, ImageMetrics>> {
+  const unique = [...new Set([...urls].map(url => String(url || '').trim()).filter(Boolean))]
+  const metrics = new Map<string, ImageMetrics>()
+  await Promise.all(unique.map(async (url) => {
+    const measured = await measureMerchantIcon(deps, url)
+    if (measured) metrics.set(url, measured)
+  }))
+  return metrics
+}
+
+/** 收集商人响应里出现过的图标地址（去重）；图标只挂在旧接口的 get_props / get_extra_props / get_pets 上。 */
+function collectMerchantIconUrls(res: any): string[] {
+  let root = res || {}
+  if (root.result && typeof root.result === 'object') root = root.result
+  const merchantActivities = Array.isArray(root.merchantActivities)
+    ? root.merchantActivities
+    : Array.isArray(root.merchant_activities) ? root.merchant_activities : []
+
+  const urls = new Set<string>()
+  for (const activity of merchantActivities) {
+    for (const key of ['get_props', 'get_extra_props', 'get_pets']) {
+      for (const item of Array.isArray(activity?.[key]) ? activity[key] : []) {
+        const url = String(item?.icon_url || '').trim()
+        if (url) urls.add(url)
+      }
+    }
+  }
+  return [...urls]
+}
+
+function buildMerchantGoodsAll(
   products: MerchantProductForRender[],
   options: { includeEnded: boolean },
-) {
+): MerchantCardItem[] {
   const catOrder: Record<MerchantCategoryKey, number> = { round: 0, normal: 1, weekend: 2 }
-  const startY = 592
-  const cardHeight = 308
-  const gap = 43
 
   const goodsAll: MerchantCardItem[] = products.map((product) => {
     const limit = product.limit
@@ -424,8 +560,21 @@ function buildMerchantCardItems(
     return Number(b.price || 0) - Number(a.price || 0)
   })
 
+  return goodsAll
+}
+
+export function buildMerchantCardItems(
+  products: MerchantProductForRender[],
+  options: { includeEnded: boolean, iconMetrics?: Map<string, ImageMetrics> },
+) {
+  const startY = 592
+  const cardHeight = 308
+  const gap = 43
+
+  const goodsAll = buildMerchantGoodsAll(products, options)
   const goods = goodsAll.map((item, index) => ({
     ...item,
+    ...buildMerchantIconStyle(item.iconUrl, options.iconMetrics),
     num: String(index + 1).padStart(2, '0'),
     top: startY + index * (cardHeight + gap),
   }))
@@ -433,7 +582,55 @@ function buildMerchantCardItems(
   const bottomFrameTop = lastCardTop + 287
   const pageHeight = bottomFrameTop + 160
 
-  return { goods, bottomFrameTop, pageHeight }
+  return { goods, bottomFrameTop, ...buildMerchantRenderParams(pageHeight) }
+}
+
+/**
+ * 今日卡片按轮次分行：热销（roundId 0，全天/跨天在架）置顶，第 1~4 轮升序。
+ * 每件商品落在哪一轮由商品数据的 roundId 事先算好。
+ */
+export function buildTodayRows(
+  goods: MerchantCardItem[],
+  currentRoundId: number | null,
+  iconMetrics?: Map<string, ImageMetrics>,
+) {
+  const grouped = new Map<number, MerchantCardItem[]>()
+  for (const item of goods) {
+    const roundId = Number(item.roundId) || 0
+    if (!grouped.has(roundId)) grouped.set(roundId, [])
+    grouped.get(roundId)!.push(item)
+  }
+
+  const roundIds = [...grouped.keys()].sort((a, b) => {
+    if (a === 0) return -1
+    if (b === 0) return 1
+    return a - b
+  })
+
+  const available = MERCHANT_TODAY_ROW_WIDTH - MERCHANT_TODAY_TAB_WIDTH
+
+  return roundIds.map((roundId, index) => {
+    const win = ROUND_WINDOWS.find(item => item.id === roundId)
+    const list = grouped.get(roundId)!
+    const cellWidth = Math.min(MERCHANT_TODAY_CELL_WIDTH, available / Math.max(list.length, 1))
+    const iconSize = Math.min(MERCHANT_TODAY_ICON_SIZE, cellWidth - 4)
+    const iconBox = {
+      width: iconSize,
+      height: iconSize,
+      targetArea: MERCHANT_TODAY_ICON_TARGET_AREA * ((iconSize / MERCHANT_TODAY_ICON_SIZE) ** 2),
+    }
+
+    return {
+      roundId,
+      label: win ? `第${roundId}轮` : '热销',
+      timeLabel: win ? `${padNumber(win.startHour)}-${padNumber(win.endHour)}` : '全天',
+      isCurrent: Boolean(currentRoundId) && roundId === currentRoundId,
+      top: MERCHANT_TODAY_START_Y + (index * (MERCHANT_TODAY_ROW_HEIGHT + MERCHANT_TODAY_ROW_GAP)),
+      cellWidth,
+      iconSize,
+      items: list.map(item => ({ ...item, ...buildMerchantIconStyle(item.iconUrl, iconMetrics, iconBox) })),
+    }
+  })
 }
 
 function getCurrentMerchantProducts(products: MerchantProductForRender[], roundInfo: MerchantRoundInfo) {
@@ -530,7 +727,7 @@ function merchantViewOptions(deps: Partial<PluginDeps>): MerchantNormalizeOption
   }
 }
 
-function buildMerchantRenderPayload(res: any, now = new Date(), options?: MerchantNormalizeOptions) {
+function buildMerchantRenderPayload(res: any, now = new Date(), options?: MerchantNormalizeOptions, iconMetrics?: Map<string, ImageMetrics>) {
   const allProducts = normalizeMerchantProducts(res, now, options)
   const roundInfo = getCurrentMerchantRound(now)
   const products = getCurrentMerchantProducts(allProducts, roundInfo)
@@ -541,7 +738,7 @@ function buildMerchantRenderPayload(res: any, now = new Date(), options?: Mercha
   const data = {
     dateStr: getMerchantDateStr(now),
     timeRange,
-    ...buildMerchantCardItems(products, { includeEnded: false }),
+    ...buildMerchantCardItems(products, { includeEnded: false, iconMetrics }),
   }
   const fallback = buildMerchantFallbackText(TEXT.merchant, products, roundInfo)
 
@@ -569,7 +766,7 @@ function buildLegacyMerchantRenderPayload(res: any, now = new Date(), options?: 
   return { products, roundInfo, data, fallback }
 }
 
-function buildTodayMerchantRenderPayload(res: any, now = new Date(), options?: MerchantNormalizeOptions, priceLog?: MerchantPriceLog) {
+function buildTodayMerchantRenderPayload(res: any, now = new Date(), options?: MerchantNormalizeOptions, priceLog?: MerchantPriceLog, iconMetrics?: Map<string, ImageMetrics>) {
   const products = backfillTodayPrices(priceLog, normalizeMerchantProducts(res, now, options)
     .filter(product => {
       const source = {
@@ -578,9 +775,29 @@ function buildTodayMerchantRenderPayload(res: any, now = new Date(), options?: M
       }
       return isMerchantItemToday(source, now)
     }), now)
+  const roundInfo = getCurrentMerchantRound(now)
+  const goodsAll = buildMerchantGoodsAll(products, { includeEnded: true })
+  const rows = buildTodayRows(goodsAll, roundInfo.current, iconMetrics)
+
+  // 扁平 goods 仍按行序编号，方便日志与订阅侧复用
+  const goods: (MerchantCardItem & { num: string })[] = []
+  for (const row of rows) {
+    for (const item of row.items) {
+      goods.push({ ...item, num: String(goods.length + 1).padStart(2, '0') })
+    }
+  }
+
+  const lastRowTop = rows.length > 0 ? rows[rows.length - 1].top : MERCHANT_TODAY_START_Y
+  const bottomFrameTop = (lastRowTop + MERCHANT_TODAY_ROW_HEIGHT) - MERCHANT_TODAY_FRAME_OVERLAP
+  const pageHeight = bottomFrameTop + 160
+
   const data = {
     dateStr: getMerchantDateStr(now),
-    ...buildMerchantCardItems(products, { includeEnded: true }),
+    goods,
+    rows,
+    startTop: MERCHANT_TODAY_START_Y,
+    bottomFrameTop,
+    ...buildMerchantRenderParams(pageHeight),
   }
   const fallback = buildMerchantFallbackText(`今日远行商人 (${getChinaDateText(now)})`, products)
 
@@ -625,28 +842,36 @@ function useLegacyMerchantUi(deps: PluginDeps) {
   return deps.config.merchantUiStyle === 'old'
 }
 
-function buildConfiguredMerchantRenderPayload(deps: PluginDeps, res: any, now = new Date()) {
+async function buildConfiguredMerchantRenderPayload(deps: PluginDeps, res: any, now = new Date()) {
   const options = merchantViewOptions(deps)
-  return clockScope.run(new MerchantClock(deps.config.merchantTimezone || 'Asia/Shanghai'), () => {
-    const payload = useLegacyMerchantUi(deps)
-      ? buildLegacyMerchantRenderPayload(res, now, options)
-      : buildMerchantRenderPayload(res, now, options)
+  return clockScope.run(new MerchantClock(deps.config.merchantTimezone || 'Asia/Shanghai'), async () => {
+    if (useLegacyMerchantUi(deps)) {
+      return {
+        ...buildLegacyMerchantRenderPayload(res, now, options),
+        templateName: 'yuanxing-shangren' as const,
+      }
+    }
+    const iconMetrics = await collectMerchantIconMetrics(deps, collectMerchantIconUrls(res))
     return {
-      ...payload,
-      templateName: useLegacyMerchantUi(deps) ? 'yuanxing-shangren' : 'yuanxing-shangren/merchant',
+      ...buildMerchantRenderPayload(res, now, options, iconMetrics),
+      templateName: 'yuanxing-shangren/merchant' as const,
     }
   })
 }
 
-function buildConfiguredTodayMerchantRenderPayload(deps: PluginDeps, res: any, now = new Date()) {
+async function buildConfiguredTodayMerchantRenderPayload(deps: PluginDeps, res: any, now = new Date()) {
   const options = merchantViewOptions(deps)
-  return clockScope.run(new MerchantClock(deps.config.merchantTimezone || 'Asia/Shanghai'), () => {
-    const payload = useLegacyMerchantUi(deps)
-      ? buildLegacyTodayMerchantRenderPayload(res, now, options, deps.merchantPriceLog)
-      : buildTodayMerchantRenderPayload(res, now, options, deps.merchantPriceLog)
+  return clockScope.run(new MerchantClock(deps.config.merchantTimezone || 'Asia/Shanghai'), async () => {
+    if (useLegacyMerchantUi(deps)) {
+      return {
+        ...buildLegacyTodayMerchantRenderPayload(res, now, options, deps.merchantPriceLog),
+        templateName: 'yuanxing-shangren' as const,
+      }
+    }
+    const iconMetrics = await collectMerchantIconMetrics(deps, collectMerchantIconUrls(res))
     return {
-      ...payload,
-      templateName: useLegacyMerchantUi(deps) ? 'yuanxing-shangren' : 'yuanxing-shangren/today',
+      ...buildTodayMerchantRenderPayload(res, now, options, deps.merchantPriceLog, iconMetrics),
+      templateName: 'yuanxing-shangren/today' as const,
     }
   })
 }
@@ -682,7 +907,7 @@ async function checkMerchantSubscriptions(deps: PluginDeps, signal?: AbortSignal
   }
   recordLiveMerchantPrices(deps, res)
 
-  const { products, roundInfo, data, fallback, templateName } = buildConfiguredMerchantRenderPayload(deps, res)
+  const { products, roundInfo, data, fallback, templateName } = await buildConfiguredMerchantRenderPayload(deps, res)
   if (!products.length) return { subscriptions: Object.keys(subs).length, matched: 0, pushed: 0, kind: 'empty' as const }
   const productNames = products.map((p: any) => p.name || '').filter(Boolean)
   // 开启后全天商品每个订阅每天只推送一次；仅作用于按商品名订阅的推送，
@@ -770,7 +995,7 @@ export function register(deps: PluginDeps) {
       if (!res) return `\u83b7\u53d6\u8fdc\u884c\u5546\u4eba\u6570\u636e\u5931\u8d25\uff1a${client.getLastErrorBrief()}`
       recordLiveMerchantPrices(deps, res)
 
-      const { data, fallback, templateName } = buildConfiguredMerchantRenderPayload(deps, res)
+      const { data, fallback, templateName } = await buildConfiguredMerchantRenderPayload(deps, res)
       const png = await deps.renderer.renderHtml(ctx, templateName, data)
       await sendImageWithFallback(session, png, fallback, 'merchant:yuanxing-shangren', deps.config)
     })
@@ -782,7 +1007,7 @@ export function register(deps: PluginDeps) {
       if (!res) return `获取今日远行商人数据失败：${client.getLastErrorBrief()}`
       recordLiveMerchantPrices(deps, res)
 
-      const { data, fallback, templateName } = buildConfiguredTodayMerchantRenderPayload(deps, res)
+      const { data, fallback, templateName } = await buildConfiguredTodayMerchantRenderPayload(deps, res)
       const png = await deps.renderer.renderHtml(ctx, templateName, data)
       await sendImageWithFallback(session, png, fallback, 'merchant:yuanxing-shangren:today', deps.config)
     })
